@@ -260,7 +260,7 @@ read -p "¿Crear configuración CI/CD (bitbucket-pipelines.yml)? (y/n): " resp
 # BACKUP
 # ================================================================================================
 
-if [ "$STANDARDS_ONLY" != "true" ]; then
+if [ "$STANDARDS_ONLY" != "true" ] && [ "$ADD_STANDARDS_ONLY" != "true" ]; then
     print_info "Creando backup de archivos originales..."
     BACKUP_DIR="./backup-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$BACKUP_DIR"
@@ -295,7 +295,7 @@ safe_sed() {
     fi
 }
 
-if [ "$STANDARDS_ONLY" != "true" ]; then
+if [ "$STANDARDS_ONLY" != "true" ] && [ "$ADD_STANDARDS_ONLY" != "true" ]; then
     # --- composer.json ---
     if [ -f "composer.json" ]; then
         print_info "Actualizando composer.json..."
@@ -667,12 +667,12 @@ fi
 # CREAR ARCHIVO DE CONFIGURACIÓN
 # ================================================================================================
 
-if [ "$STANDARDS_ONLY" != "true" ]; then
+if [ "$STANDARDS_ONLY" != "true" ] && [ "$ADD_STANDARDS_ONLY" != "true" ]; then
     print_info "Creando archivo de configuración del proyecto..."
 
     cat > .project-config << EOF
 # Configuración del Proyecto WordPress
-# Generado automáticamente por init-project-v2.sh
+# Generado automáticamente por init-project.sh
 # Fecha: $(date +%Y-%m-%d\ %H:%M:%S)
 
 PROJECT_NAME="$PROJECT_NAME"
@@ -707,6 +707,16 @@ echo ""
 
 if [ "$STANDARDS_ONLY" = "true" ]; then
     print_success "Estándares de código actualizados"
+elif [ "$ADD_STANDARDS_ONLY" = "true" ]; then
+    print_success "Estándares añadidos al proyecto existente"
+    echo ""
+    print_info "Tu proyecto ahora incluye:"
+    [ -f "phpcs.xml.dist" ] && echo "  • phpcs.xml.dist (WordPress PHP Standards)"
+    [ -f "phpstan.neon.dist" ] && echo "  • phpstan.neon.dist (PHP Static Analysis)"
+    [ -f "eslint.config.js" ] && echo "  • eslint.config.js (WordPress JS Standards)"
+    [ -f "commitlint.config.cjs" ] && echo "  • commitlint.config.cjs (Conventional Commits)"
+    [ -f "package.json.backup" ] && echo "  • package.json (fusionado con backup creado)"
+    [ -f "composer.json.backup" ] && echo "  • composer.json (fusionado con backup creado)"
 else
     print_success "Proyecto '$PROJECT_NAME' configurado correctamente"
     echo ""

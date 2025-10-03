@@ -1,0 +1,23 @@
+# WordPress Project Configuration Template
+# Este archivo es generado automáticamente por init-project.sh
+# NO editar manualmente - usar ./init-project.sh para regenerar
+
+# === INFORMACIÓN DEL PROYECTO ===
+PROJECT_NAME=""                 # Nombre legible del proyecto (ej: "Mi Proyecto Awesome")
+PROJECT_SLUG=""                 # Slug en minúsculas (ej: "mi-proyecto-awesome")
+PROJECT_CONSTANT=""             # Constantes PHP (ej: "MI_PROYECTO_AWESOME")
+PROJECT_NAMESPACE=""            # Namespace PHP (ej: "MiProyectoAwesome")
+
+# === COMPONENTES ===
+CHILD_THEME_NAME=""            # Nombre del theme hijo (ej: "mi-proyecto-theme")
+PLUGIN_NAME=""                 # Nombre del plugin de bloques (ej: "mi-proyecto-custom-blocks")
+TEXT_DOMAIN=""                 # Text domain para i18n (ej: "mi-proyecto")
+
+# === URLS DE DESARROLLO ===
+LOCAL_URL=""                   # URL local (ej: "https://local.mi-proyecto.com")
+STAGING_URL=""                 # URL staging (ej: "https://dev.mi-proyecto.levelstage.com")
+PRODUCTION_URL=""              # URL producción (ej: "https://mi-proyecto.com")
+
+# === INFORMACIÓN ADICIONAL ===
+INIT_DATE=""                   # Fecha de inicialización
+BACKUP_DIR=""                  # Directorio del backup original

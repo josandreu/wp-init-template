@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<ruleset name="WordPress Project PHP Standards">
+    <description>PHP CodeSniffer rules for WordPress project following official standards</description>
+
+    <!-- WordPress Coding Standards -->
+    <rule ref="WordPress">
+        <!-- Exclude rules that are too restrictive for development -->
+        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+		<exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+        <!-- Exclude documentation requirements for development -->
+        <exclude name="Squiz.Commenting.FunctionComment.Missing"/>
+        <exclude name="Squiz.Commenting.FileComment.Missing"/>
+        <exclude name="Squiz.Commenting.ClassComment.Missing"/>
+        <exclude name="Squiz.Commenting.VariableComment.Missing"/>
+    </rule>
+
+    <!-- WordPress prefix validation -->
+    <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+        <properties>
+            <property name="prefixes" type="array">
+                <element value="my_project_"/>
+                <element value="MY_PROJECT_"/>
+                <element value="MyProject\"/>
+                <element value="flat101_"/>
+                <element value="FLAT101_"/>
+                <element value="Flat101\"/>
+                <element value="custom_"/>
+                <element value="CUSTOM_"/>
+                <element value="Custom\"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- WordPress i18n validation -->
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+                <element value="my-project-custom-blocks"/>
+                <element value="my-project-theme"/>
+                <element value="flat101-starter-theme"/>
+                <element value="custom-cpt"/>
+                <element value="flat101-base"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- Files to check -->
+    <file>wordpress/wp-content/plugins/my-project-custom-blocks</file>
+    <file>wordpress/wp-content/themes/flat101-starter-theme</file>
+    <file>wordpress/wp-content/themes/my-project-theme</file>
+
+    <!-- Exclude directories -->
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/build/*</exclude-pattern>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/tests/*</exclude-pattern>
+    <exclude-pattern>*/coverage/*</exclude-pattern>
+    <exclude-pattern>*.min.js</exclude-pattern>
+    <exclude-pattern>*.min.css</exclude-pattern>
+    <exclude-pattern>wordpress/wp-admin/*</exclude-pattern>
+    <exclude-pattern>wordpress/wp-includes/*</exclude-pattern>
+    <exclude-pattern>wordpress/wp-content/themes/twentytwentyfive/*</exclude-pattern>
+
+    <!-- File extensions to check -->
+    <arg name="extensions" value="php"/>
+    <arg value="p"/>
+    <arg value="s"/>
+    <arg name="parallel" value="8"/>
+    
+    <!-- Do not fail with a non-zero exit code when only warnings are present -->
+    <config name="ignore_warnings_on_exit" value="1"/>
+</ruleset>

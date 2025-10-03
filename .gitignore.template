@@ -1,0 +1,70 @@
+# WordPress Project - .gitignore template
+# Este archivo puede ser usado como base para tu .gitignore
+
+# === DEPENDENCIAS ===
+node_modules/
+vendor/
+wordpress/wp-content/plugins/*/node_modules/
+wordpress/wp-content/plugins/*/vendor/
+wordpress/wp-content/themes/*/node_modules/
+wordpress/wp-content/themes/*/vendor/
+
+# === CACHES ===
+.eslintcache
+.stylelintcache
+.prettiercache
+.phpcs-cache
+*.cache
+
+# === BUILD FILES ===
+wordpress/wp-content/plugins/*/build/
+wordpress/wp-content/themes/*/assets/build/
+dist/
+*.min.js
+*.min.css
+*.map
+
+# === WORDPRESS ===
+wordpress/wp-config.php
+wordpress/wp-content/uploads/
+wordpress/wp-content/upgrade/
+wordpress/wp-content/backup-db/
+wordpress/wp-content/cache/
+wordpress/wp-content/debug.log
+*.log
+
+# === BACKUPS ===
+backups/
+backup-*/
+*.sql
+*.sql.gz
+
+# === CONFIGURACIÓN LOCAL ===
+.project-config
+.env
+.env.local
+auth.json
+wp-cli.local.yml
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === REPORTS ===
+reports/
+coverage/
+test-results/
+playwright-report/
+
+# === TEMPORAL ===
+tmp/
+temp/
+*.tmp

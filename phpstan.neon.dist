@@ -1,0 +1,48 @@
+parameters:
+  # Level of analysis (0-9, higher = more strict)
+  level: 5
+
+  # Paths to analyze
+  paths:
+    - wordpress/wp-content/plugins/my-project-custom-blocks/src/
+    - wordpress/wp-content/plugins/my-project-custom-blocks/my-project-custom-blocks.php
+    - wordpress/wp-content/mu-plugins/flat101-base/
+    - wordpress/wp-content/themes/flat101-starter-theme/inc/
+    - wordpress/wp-content/themes/flat101-starter-theme/functions.php
+    - wordpress/wp-content/themes/my-project-theme/inc/
+    - wordpress/wp-content/themes/my-project-theme/functions.php
+
+  # Exclude paths
+  excludePaths:
+    - wordpress/wp-content/plugins/my-project-custom-blocks/build/
+    - wordpress/wp-content/plugins/my-project-custom-blocks/vendor/
+    - wordpress/wp-content/plugins/my-project-custom-blocks/node_modules/
+    - wordpress/wp-content/plugins/my-project-custom-blocks/tests/
+    - wordpress/wp-content/plugins/my-project-custom-blocks/coverage/
+    - wordpress/wp-admin/
+    - wordpress/wp-includes/
+    - wordpress/wp-content/themes/twentytwentyfive/
+
+  # WordPress specific settings
+  bootstrapFiles:
+    - wordpress/wp-content/plugins/my-project-custom-blocks/vendor/autoload.php
+
+  # WordPress specific extensions
+  includes:
+    - phar://phpstan.phar/conf/bleedingEdge.neon
+
+  # Ignore errors that are common in WordPress
+  ignoreErrors:
+    - '#Call to an undefined method [a-zA-Z0-9\\_]+::[a-zA-Z0-9\\_]+#'
+    - '#Access to an undefined property [a-zA-Z0-9\\_]+::\$[a-zA-Z0-9\\_]+#'
+    - '#Undefined variable: \$[a-zA-Z0-9\\_]+#'
+    - '#Undefined constant [a-zA-Z0-9\\_]+#'
+    - '#Function [a-zA-Z0-9\\_]+ not found#'
+    - '#Variable \$[a-zA-Z0-9\\_]+ might not be defined#'
+    - '#Cannot call method [a-zA-Z0-9\\_]+\(\) on mixed#'
+
+  # PHP version
+  phpVersion: 80100
+
+  # Check missing typehints
+  checkMissingTypehints: false

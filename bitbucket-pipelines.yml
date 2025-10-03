@@ -1,0 +1,217 @@
+# Bitbucket Pipelines CI/CD Configuration for MyProject WordPress Project
+# This pipeline automates testing, building, and deployment processes
+
+image: node:18
+
+definitions:
+    caches:
+        npm-global: ~/.npm
+        composer-global: ~/.composer/cache
+    services:
+        mysql:
+            image: mysql:8.0
+            variables:
+                MYSQL_DATABASE: wordpress_test
+                MYSQL_ROOT_PASSWORD: root
+                MYSQL_USER: wp_user
+                MYSQL_PASSWORD: wp_pass
+    steps:
+        - step: &install-dependencies
+              name: 📦 Install Dependencies
+              caches:
+                  - npm-global
+                  - composer-global
+                  - node
+              script:
+                  - echo "🔧 Installing Node.js dependencies..."
+                  - npm ci
+                  - echo "🔧 Installing Composer dependencies..."
+                  - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+                  - composer install --no-dev --optimize-autoloader
+                  - echo "🔧 Installing theme dependencies..."
+                  - cd wordpress/wp-content/themes/my-project-theme && npm ci
+                  - cd ../../../.. && cd wordpress/wp-content/themes/flat101-starter-theme && npm ci
+                  - echo "🔧 Installing plugin dependencies..."
+                  - cd ../../../.. && cd wordpress/wp-content/plugins/my-project-custom-blocks && npm ci
+                  - cd ../../../..
+              artifacts:
+                  - node_modules/**
+                  - vendor/**
+                  - wordpress/wp-content/themes/*/node_modules/**
+                  - wordpress/wp-content/plugins/*/node_modules/**
+
+        - step: &code-quality
+              name: 🔍 Code Quality & Standards
+              caches:
+                  - npm-global
+                  - node
+              script:
+                  - echo "🔍 Running code quality checks..."
+                  - npm run lint:js
+                  - npm run lint:css
+                  - npm run lint:php
+                  - echo "📊 Running static analysis..."
+                  - npm run analyze:php
+                  - echo "✅ Code quality checks passed"
+
+        - step: &security-audit
+              name: 🔒 Security Audit
+              script:
+                  - echo "🔒 Running security audit..."
+                  - npm audit --audit-level=high
+                  - echo "✅ Security audit completed"
+
+        - step: &build-assets
+              name: 📦 Build Assets
+              caches:
+                  - npm-global
+                  - node
+              script:
+                  - echo "📦 Building production assets..."
+                  - npm run build:all
+                  - echo "📊 Analyzing bundle sizes..."
+                  - npm run analyze:bundle-size
+                  - echo "✅ Assets built successfully"
+              artifacts:
+                  - wordpress/wp-content/themes/*/assets/build/**
+                  - wordpress/wp-content/plugins/*/build/**
+
+        - step: &unit-tests
+              name: 🧪 Unit Tests
+              services:
+                  - mysql
+              script:
+                  - echo "🧪 Running unit tests..."
+                  - npm run test:unit
+                  - echo "✅ Unit tests passed"
+
+        - step: &e2e-tests
+              name: 🎭 E2E Tests
+              services:
+                  - mysql
+              script:
+                  - echo "🎭 Running E2E tests..."
+                  - npm run test:e2e
+                  - echo "✅ E2E tests passed"
+
+        - step: &accessibility-tests
+              name: ♿ Accessibility Tests
+              script:
+                  - echo "♿ Running accessibility tests..."
+                  - npm install -g pa11y-ci
+                  - npm run test:a11y
+                  - echo "✅ Accessibility tests passed"
+
+        - step: &performance-tests
+              name: ⚡ Performance Tests
+              script:
+                  - echo "⚡ Running performance tests..."
+                  - npm install -g @lhci/cli
+                  - npm run lighthouse:ci
+                  - echo "✅ Performance tests completed"
+
+        - step: &deploy-staging
+              name: 🚀 Deploy to Staging
+              deployment: staging
+              script:
+                  - echo "🚀 Deploying to staging environment..."
+                  - echo "📋 Environment: https://dev.MyProject.levelstage.com"
+                  - echo "🔄 Running deployment script..."
+                  # Add your actual deployment commands here
+                  - ./sh/deploy/deploy.sh staging
+                  - echo "✅ Staging deployment completed"
+                  - echo "🌐 Visit: https://dev.MyProject.levelstage.com"
+
+        - step: &deploy-production
+              name: 🌟 Deploy to Production
+              deployment: production
+              trigger: manual
+              script:
+                  - echo "🌟 Deploying to production environment..."
+                  - echo "📋 Environment: https://MyProject.com"
+                  - echo "🔄 Running deployment script..."
+                  # Add your actual deployment commands here
+                  - ./sh/deploy/deploy.sh production
+                  - echo "✅ Production deployment completed"
+                  - echo "🌐 Visit: https://MyProject.com"
+
+pipelines:
+    default:
+        - step: *install-dependencies
+        - parallel:
+              - step: *code-quality
+              - step: *security-audit
+        - step: *build-assets
+        - parallel:
+              - step: *unit-tests
+              - step: *accessibility-tests
+        - step: *performance-tests
+
+    branches:
+        develop:
+            - step: *install-dependencies
+            - parallel:
+                  - step: *code-quality
+                  - step: *security-audit
+            - step: *build-assets
+            - parallel:
+                  - step: *unit-tests
+                  - step: *e2e-tests
+                  - step: *accessibility-tests
+            - step: *performance-tests
+            - step: *deploy-staging
+
+        main:
+            - step: *install-dependencies
+            - parallel:
+                  - step: *code-quality
+                  - step: *security-audit
+            - step: *build-assets
+            - parallel:
+                  - step: *unit-tests
+                  - step: *e2e-tests
+                  - step: *accessibility-tests
+            - step: *performance-tests
+            - step: *deploy-production
+
+    pull-requests:
+        '**':
+            - step: *install-dependencies
+            - parallel:
+                  - step: *code-quality
+                  - step: *security-audit
+            - step: *build-assets
+            - parallel:
+                  - step: *unit-tests
+                  - step: *accessibility-tests
+
+    custom:
+        deploy-staging-manual:
+            - step: *install-dependencies
+            - step: *build-assets
+            - step: *deploy-staging
+
+        deploy-production-manual:
+            - step: *install-dependencies
+            - step: *build-assets
+            - step: *deploy-production
+
+        full-test-suite:
+            - step: *install-dependencies
+            - parallel:
+                  - step: *code-quality
+                  - step: *security-audit
+            - step: *build-assets
+            - parallel:
+                  - step: *unit-tests
+                  - step: *e2e-tests
+                  - step: *accessibility-tests
+                  - step: *performance-tests
+# Environment variables needed:
+# - STAGING_HOST: Staging server hostname
+# - STAGING_USER: Staging server username
+# - STAGING_PATH: Staging server path
+# - PRODUCTION_HOST: Production server hostname
+# - PRODUCTION_USER: Production server username
+# - PRODUCTION_PATH: Production server path
+# - SSH_PRIVATE_KEY: SSH private key for deployments

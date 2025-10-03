@@ -446,39 +446,59 @@ if [ "$ADD_STANDARDS_ONLY" = "true" ]; then
     
     # Detectar nombre del proyecto desde composer.json si existe
     if [ -f "composer.json" ]; then
-        DETECTED_NAME=$(grep -o '"name": "[^"]*"' composer.json | head -1 | cut -d'"' -f4 | cut -d'/' -f2 | sed 's/-wordpress$//')
+        DETECTED_NAME=$(grep -o '"name": "[^"]*"' composer.json | head -1 | cut -d'"' -f4 | cut -d'/' -f2 | sed 's/-wordpress$//' 2>/dev/null || echo "")
         if [ -n "$DETECTED_NAME" ]; then
-            print_info "Proyecto detectado: $DETECTED_NAME"
-            read -p "¿Es correcto? (y/n): " CONFIRM_NAME
+            echo ""
+            print_info "Proyecto detectado desde composer.json: ${GREEN}$DETECTED_NAME${NC}"
+            read -p "¿Usar este nombre? (y/n): " CONFIRM_NAME
+            echo ""
             if [[ $CONFIRM_NAME =~ ^[Yy]$ ]]; then
                 PROJECT_SLUG="$DETECTED_NAME"
+                print_success "Usando: $PROJECT_SLUG"
+            else
+                print_info "OK, introduce un nombre diferente"
             fi
+        else
+            print_info "No se pudo detectar el nombre del proyecto desde composer.json"
         fi
     fi
     
     # Si no se detectó o no se confirmó, preguntar y validar
+    echo ""
     while [ -z "$PROJECT_SLUG" ]; do
-        read -p "Nombre del proyecto (slug, ej: mi-proyecto): " PROJECT_SLUG
+        echo -n "Nombre del proyecto (slug, ej: mi-proyecto): "
+        read PROJECT_SLUG
         if ! validate_slug "$PROJECT_SLUG"; then
             PROJECT_SLUG=""
+            echo ""
         fi
     done
+    
+    print_success "Nombre del proyecto: $PROJECT_SLUG"
+    echo ""
     
     # Preguntar por theme y plugin con validación
     while true; do
-        read -p "Nombre del theme principal (ej: ${PROJECT_SLUG}-theme): " CHILD_THEME_NAME
+        echo -n "Nombre del theme principal (Enter para ${PROJECT_SLUG}-theme): "
+        read CHILD_THEME_NAME
         CHILD_THEME_NAME=${CHILD_THEME_NAME:-"${PROJECT_SLUG}-theme"}
         if validate_slug "$CHILD_THEME_NAME"; then
+            print_success "Theme: $CHILD_THEME_NAME"
             break
         fi
+        echo ""
     done
     
+    echo ""
     while true; do
-        read -p "Nombre del plugin de bloques (ej: ${PROJECT_SLUG}-custom-blocks): " PLUGIN_NAME
+        echo -n "Nombre del plugin de bloques (Enter para ${PROJECT_SLUG}-custom-blocks): "
+        read PLUGIN_NAME
         PLUGIN_NAME=${PLUGIN_NAME:-"${PROJECT_SLUG}-custom-blocks"}
         if validate_slug "$PLUGIN_NAME"; then
+            print_success "Plugin: $PLUGIN_NAME"
             break
         fi
+        echo ""
     done
     
     # Generar variantes del nombre usando funciones robustas

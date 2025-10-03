@@ -31,6 +31,70 @@ print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 print_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
 print_question() { echo -e "${MAGENTA}❓ $1${NC}"; }
 
+# Función helper para sed compatible con macOS y Linux
+safe_sed() {
+    local pattern="$1"
+    local file="$2"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "$pattern" "$file"
+    else
+        sed -i "$pattern" "$file"
+    fi
+}
+
+# Validar slug (solo minúsculas, números y guiones)
+validate_slug() {
+    local slug="$1"
+    if [ -z "$slug" ]; then
+        print_error "El slug no puede estar vacío"
+        return 1
+    fi
+    if [[ ! "$slug" =~ ^[a-z0-9-]+$ ]]; then
+        print_error "El slug solo puede contener letras minúsculas, números y guiones"
+        print_info "Ejemplo válido: mi-proyecto"
+        return 1
+    fi
+    return 0
+}
+
+# Generar namespace de forma robusta
+generate_namespace() {
+    local slug="$1"
+    # Convertir a PascalCase: mi-proyecto → MiProyecto
+    echo "$slug" | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1' OFS=''
+}
+
+# Generar constante de forma robusta
+generate_constant() {
+    local slug="$1"
+    echo "$slug" | tr '[:lower:]' '[:upper:]' | tr '-' '_'
+}
+
+# Detectar estructura WordPress
+detect_wordpress_structure() {
+    if [ -d "wordpress/wp-content" ]; then
+        WP_CONTENT_DIR="wordpress/wp-content"
+        return 0
+    elif [ -d "wp-content" ]; then
+        WP_CONTENT_DIR="wp-content"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Variables globales
+TEMP_FILES=""
+
+# Cleanup al salir o en error
+cleanup() {
+    if [ -n "$TEMP_FILES" ]; then
+        rm -f $TEMP_FILES 2>/dev/null || true
+    fi
+}
+
+trap cleanup EXIT ERR INT TERM
+
 # Banner
 clear
 echo ""
@@ -232,29 +296,33 @@ fi
 # ================================================================================================
 
 echo ""
-print_info "Selección de archivos a crear/actualizar..."
-echo ""
 
 CREATE_MAKEFILE=true
 CREATE_README=true
 CREATE_GITHOOKS=true
 CREATE_CI=true
 
-if [ "$HAS_MAKEFILE" = true ]; then
-    read -p "¿Actualizar Makefile existente? (y/n): " resp
-    [[ ! $resp =~ ^[Yy]$ ]] && CREATE_MAKEFILE=false
+# Solo hacer estas preguntas si NO es Modo 4
+if [ "$ADD_STANDARDS_ONLY" != "true" ]; then
+    print_info "Selección de archivos a crear/actualizar..."
+    echo ""
+    
+    if [ "$HAS_MAKEFILE" = true ]; then
+        read -p "¿Actualizar Makefile existente? (y/n): " resp
+        [[ ! $resp =~ ^[Yy]$ ]] && CREATE_MAKEFILE=false
+    fi
+
+    if [ -f "README.md" ]; then
+        read -p "¿Actualizar README.md existente? (y/n): " resp
+        [[ ! $resp =~ ^[Yy]$ ]] && CREATE_README=false
+    fi
+
+    read -p "¿Configurar Git hooks (Husky)? (y/n): " resp
+    [[ ! $resp =~ ^[Yy]$ ]] && CREATE_GITHOOKS=false
+
+    read -p "¿Crear configuración CI/CD (bitbucket-pipelines.yml)? (y/n): " resp
+    [[ ! $resp =~ ^[Yy]$ ]] && CREATE_CI=false
 fi
-
-if [ -f "README.md" ]; then
-    read -p "¿Actualizar README.md existente? (y/n): " resp
-    [[ ! $resp =~ ^[Yy]$ ]] && CREATE_README=false
-fi
-
-read -p "¿Configurar Git hooks (Husky)? (y/n): " resp
-[[ ! $resp =~ ^[Yy]$ ]] && CREATE_GITHOOKS=false
-
-read -p "¿Crear configuración CI/CD (bitbucket-pipelines.yml)? (y/n): " resp
-[[ ! $resp =~ ^[Yy]$ ]] && CREATE_CI=false
 
 # ================================================================================================
 # BACKUP
@@ -283,17 +351,6 @@ fi
 
 echo ""
 print_info "Actualizando archivos de configuración..."
-
-# Función helper para sed compatible con macOS y Linux
-safe_sed() {
-    local pattern="$1"
-    local file="$2"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "$pattern" "$file"
-    else
-        sed -i "$pattern" "$file"
-    fi
-}
 
 if [ "$STANDARDS_ONLY" != "true" ] && [ "$ADD_STANDARDS_ONLY" != "true" ]; then
     # --- composer.json ---
@@ -368,43 +425,148 @@ fi
 
 if [ "$ADD_STANDARDS_ONLY" = "true" ]; then
     echo ""
-    print_info "Copiando archivos de configuración de estándares..."
+    echo "════════════════════════════════════════════════════════════════"
+    echo "  Configuración de Nombres"
+    echo "════════════════════════════════════════════════════════════════"
+    echo ""
+    
+    # Detectar estructura WordPress
+    if detect_wordpress_structure; then
+        print_success "Estructura WordPress detectada: $WP_CONTENT_DIR"
+    else
+        print_warning "No se detectó estructura WordPress estándar"
+        read -p "¿Continuar de todos modos? (y/n): " resp
+        if [[ ! $resp =~ ^[Yy]$ ]]; then
+            print_error "Inicialización cancelada"
+            exit 1
+        fi
+    fi
+    
+    echo ""
+    
+    # Detectar nombre del proyecto desde composer.json si existe
+    if [ -f "composer.json" ]; then
+        DETECTED_NAME=$(grep -o '"name": "[^"]*"' composer.json | head -1 | cut -d'"' -f4 | cut -d'/' -f2 | sed 's/-wordpress$//')
+        if [ -n "$DETECTED_NAME" ]; then
+            print_info "Proyecto detectado: $DETECTED_NAME"
+            read -p "¿Es correcto? (y/n): " CONFIRM_NAME
+            if [[ $CONFIRM_NAME =~ ^[Yy]$ ]]; then
+                PROJECT_SLUG="$DETECTED_NAME"
+            fi
+        fi
+    fi
+    
+    # Si no se detectó o no se confirmó, preguntar y validar
+    while [ -z "$PROJECT_SLUG" ]; do
+        read -p "Nombre del proyecto (slug, ej: mi-proyecto): " PROJECT_SLUG
+        if ! validate_slug "$PROJECT_SLUG"; then
+            PROJECT_SLUG=""
+        fi
+    done
+    
+    # Preguntar por theme y plugin con validación
+    while true; do
+        read -p "Nombre del theme principal (ej: ${PROJECT_SLUG}-theme): " CHILD_THEME_NAME
+        CHILD_THEME_NAME=${CHILD_THEME_NAME:-"${PROJECT_SLUG}-theme"}
+        if validate_slug "$CHILD_THEME_NAME"; then
+            break
+        fi
+    done
+    
+    while true; do
+        read -p "Nombre del plugin de bloques (ej: ${PROJECT_SLUG}-custom-blocks): " PLUGIN_NAME
+        PLUGIN_NAME=${PLUGIN_NAME:-"${PROJECT_SLUG}-custom-blocks"}
+        if validate_slug "$PLUGIN_NAME"; then
+            break
+        fi
+    done
+    
+    # Generar variantes del nombre usando funciones robustas
+    PROJECT_CONSTANT=$(generate_constant "$PROJECT_SLUG")
+    PROJECT_NAMESPACE=$(generate_namespace "$PROJECT_SLUG")
+    TEXT_DOMAIN="$PROJECT_SLUG"
+    
+    # Verificar que las variables no estén vacías
+    if [ -z "$PROJECT_SLUG" ] || [ -z "$CHILD_THEME_NAME" ] || [ -z "$PLUGIN_NAME" ]; then
+        print_error "Error: Variables del proyecto vacías"
+        exit 1
+    fi
+    
+    echo ""
+    print_info "Configuración:"
+    echo "  • Proyecto: $PROJECT_SLUG"
+    echo "  • Theme: $CHILD_THEME_NAME"
+    echo "  • Plugin: $PLUGIN_NAME"
+    echo "  • Namespace: $PROJECT_NAMESPACE"
+    echo ""
+    
+    read -p "¿Continuar con esta configuración? (y/n): " CONFIRM_CONFIG
+    if [[ ! $CONFIRM_CONFIG =~ ^[Yy]$ ]]; then
+        print_error "Configuración cancelada"
+        exit 1
+    fi
+    
+    echo ""
+    print_info "Copiando y personalizando archivos de configuración..."
     echo ""
     
     TEMPLATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     COPIED_FILES=()
     
-    # Copiar solo archivos que NO existen
-    if [ ! -f "phpcs.xml.dist" ]; then
-        cp "$TEMPLATE_DIR/phpcs.xml.dist" .
-        COPIED_FILES+=("phpcs.xml.dist")
-        print_success "phpcs.xml.dist copiado"
-    else
-        print_warning "phpcs.xml.dist ya existe - no se sobrescribe"
+    # Función auxiliar para copiar y personalizar archivo
+    copy_and_customize_file() {
+        local file="$1"
+        local template_file="$2"
+        local description="$3"
+        
+        local should_copy=false
+        
+        if [ ! -f "$file" ]; then
+            should_copy=true
+        else
+            print_warning "$file ya existe"
+            read -p "¿Sobrescribir con la versión personalizada? (y/n): " overwrite
+            if [[ $overwrite =~ ^[Yy]$ ]]; then
+                should_copy=true
+            fi
+        fi
+        
+        if [ "$should_copy" = true ]; then
+            cp "$TEMPLATE_DIR/$template_file" "$file"
+            COPIED_FILES+=("$file")
+            return 0
+        fi
+        return 1
+    }
+    
+    # phpcs.xml.dist
+    if copy_and_customize_file "phpcs.xml.dist" "phpcs.xml.dist" "WordPress PHP Standards"; then
+        safe_sed "s/my-project/${PROJECT_SLUG}/g" phpcs.xml.dist
+        safe_sed "s/my_project_/${PROJECT_SLUG}_/g" phpcs.xml.dist
+        safe_sed "s/MY_PROJECT_/${PROJECT_CONSTANT}_/g" phpcs.xml.dist
+        safe_sed "s/MyProject\\\\\\\\/${PROJECT_NAMESPACE}\\\\\\\\/g" phpcs.xml.dist
+        safe_sed "s/my-project-custom-blocks/${PLUGIN_NAME}/g" phpcs.xml.dist
+        safe_sed "s/my-project-theme/${CHILD_THEME_NAME}/g" phpcs.xml.dist
+        print_success "phpcs.xml.dist copiado y personalizado"
     fi
     
-    if [ ! -f "phpstan.neon.dist" ]; then
-        cp "$TEMPLATE_DIR/phpstan.neon.dist" .
-        COPIED_FILES+=("phpstan.neon.dist")
-        print_success "phpstan.neon.dist copiado"
-    else
-        print_warning "phpstan.neon.dist ya existe - no se sobrescribe"
+    # phpstan.neon.dist
+    if copy_and_customize_file "phpstan.neon.dist" "phpstan.neon.dist" "PHP Static Analysis"; then
+        safe_sed "s/my-project-custom-blocks/${PLUGIN_NAME}/g" phpstan.neon.dist
+        safe_sed "s/my-project-theme/${CHILD_THEME_NAME}/g" phpstan.neon.dist
+        print_success "phpstan.neon.dist copiado y personalizado"
     fi
     
-    if [ ! -f "eslint.config.js" ]; then
-        cp "$TEMPLATE_DIR/eslint.config.js" .
-        COPIED_FILES+=("eslint.config.js")
-        print_success "eslint.config.js copiado"
-    else
-        print_warning "eslint.config.js ya existe - no se sobrescribe"
+    # eslint.config.js
+    if copy_and_customize_file "eslint.config.js" "eslint.config.js" "WordPress JS Standards"; then
+        safe_sed "s/my-project-custom-blocks/${PLUGIN_NAME}/g" eslint.config.js
+        safe_sed "s/my-project-theme/${CHILD_THEME_NAME}/g" eslint.config.js
+        print_success "eslint.config.js copiado y personalizado"
     fi
     
-    if [ ! -f "commitlint.config.cjs" ]; then
-        cp "$TEMPLATE_DIR/commitlint.config.cjs" .
-        COPIED_FILES+=("commitlint.config.cjs")
+    # commitlint.config.cjs
+    if copy_and_customize_file "commitlint.config.cjs" "commitlint.config.cjs" "Conventional Commits"; then
         print_success "commitlint.config.cjs copiado"
-    else
-        print_warning "commitlint.config.cjs ya existe - no se sobrescribe"
     fi
     
     if [ ! -f ".gitignore" ]; then
@@ -418,18 +580,78 @@ if [ "$ADD_STANDARDS_ONLY" = "true" ]; then
     fi
     
     # ========================================
-    # FUSIONAR package.json
+    # CREAR/FUSIONAR package.json
     # ========================================
     
-    if [ -f "package.json" ]; then
-        echo ""
-        print_info "Actualizando package.json existente..."
+    echo ""
+    
+    # Verificar si jq está disponible
+    HAS_JQ=false
+    if command -v jq >/dev/null 2>&1; then
+        HAS_JQ=true
+    fi
+    
+    if [ ! -f "package.json" ]; then
+        # Crear package.json desde cero
+        print_info "Creando package.json..."
         
-        # Verificar si jq está disponible
-        HAS_JQ=false
-        if command -v jq >/dev/null 2>&1; then
-            HAS_JQ=true
-        fi
+        cat > package.json << EOF
+{
+  "name": "${PROJECT_SLUG}-wordpress",
+  "version": "1.0.0",
+  "description": "WordPress project with coding standards",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint:php": "./vendor/bin/phpcs --standard=phpcs.xml.dist",
+    "lint:php:fix": "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
+    "lint:js": "eslint '**/*.{js,jsx,ts,tsx}' --max-warnings=0 --cache",
+    "lint:js:fix": "eslint '**/*.{js,jsx,ts,tsx}' --fix --cache",
+    "lint:css": "stylelint '**/*.{css,scss}' --cache",
+    "lint:css:fix": "stylelint '**/*.{css,scss}' --fix --cache",
+    "format:js": "prettier --write '**/*.{js,jsx,ts,tsx,json,md}' --cache",
+    "format:css": "prettier --write '**/*.{css,scss}' --cache",
+    "format:all": "npm-run-all format:js format:css lint:php:fix",
+    "prepare": "husky install",
+    "test:standards": "npm-run-all lint:js lint:css lint:php"
+  },
+  "devDependencies": {
+    "@wordpress/eslint-plugin": "^22.14.0",
+    "@wordpress/prettier-config": "^4.11.0",
+    "@wordpress/stylelint-config": "^20.0.2",
+    "eslint": "^9.33.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.3.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.4.2",
+    "stylelint": "^14.16.1",
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1"
+  },
+  "lint-staged": {
+    "**/*.{js,jsx,ts,tsx}": [
+      "eslint --fix --cache --max-warnings=0",
+      "prettier --write --cache"
+    ],
+    "**/*.{css,scss}": [
+      "stylelint --fix --cache",
+      "prettier --write --cache"
+    ],
+    "**/*.php": [
+      "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
+      "./vendor/bin/phpcs --standard=phpcs.xml.dist"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write --cache"
+    ]
+  }
+}
+EOF
+        print_success "package.json creado"
+        
+    elif [ -f "package.json" ]; then
+        # Actualizar package.json existente
+        print_info "Actualizando package.json existente..."
         
         if [ "$HAS_JQ" = true ]; then
             # Merge automático con jq
@@ -559,10 +781,48 @@ EOF
     fi
     
     # ========================================
-    # FUSIONAR composer.json
+    # CREAR/FUSIONAR composer.json
     # ========================================
     
-    if [ -f "composer.json" ]; then
+    if [ ! -f "composer.json" ]; then
+        # Crear composer.json desde cero
+        echo ""
+        print_info "Creando composer.json..."
+        
+        cat > composer.json << EOF
+{
+  "name": "flat101/${PROJECT_SLUG}-wordpress",
+  "description": "WordPress project with coding standards",
+  "type": "project",
+  "require": {
+    "php": ">=8.1"
+  },
+  "require-dev": {
+    "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+    "php-stubs/wordpress-stubs": "^6.2",
+    "phpcsstandards/phpcsextra": "^1.4",
+    "phpcsstandards/phpcsutils": "^1.1",
+    "phpstan/phpstan": "^2.0",
+    "szepeviktor/phpstan-wordpress": "^1.3",
+    "wp-coding-standards/wpcs": "^3.2"
+  },
+  "scripts": {
+    "lint": "phpcs --standard=phpcs.xml.dist",
+    "lint:fix": "phpcbf --standard=phpcs.xml.dist",
+    "analyze": "phpstan analyse --no-progress",
+    "test": "phpcs && phpstan analyse"
+  },
+  "config": {
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+  }
+}
+EOF
+        print_success "composer.json creado"
+        
+    elif [ -f "composer.json" ]; then
+        # Actualizar composer.json existente
         echo ""
         print_info "Actualizando composer.json existente..."
         
@@ -739,21 +999,67 @@ echo "  📋 Próximos Pasos"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
 
-if [ ! -d "node_modules" ]; then
+if [ "$ADD_STANDARDS_ONLY" = "true" ]; then
+    # Mensajes específicos para Modo 4
     echo "1. Instalar dependencias:"
-    echo "   ${BLUE}make install${NC} o ${BLUE}npm install${NC}"
+    echo "   ${BLUE}npm install${NC}"
+    if [ "$COMPOSER_AVAILABLE" = true ]; then
+        echo "   ${BLUE}composer install${NC}"
+    fi
     echo ""
-fi
+    
+    echo "2. Configurar Git hooks:"
+    echo "   ${BLUE}npm run prepare${NC}"
+    echo ""
+    
+    echo "3. Verificar estándares:"
+    echo "   ${BLUE}npm run lint:js${NC}"
+    echo "   ${BLUE}npm run lint:css${NC}"
+    echo "   ${BLUE}npm run lint:php${NC}"
+    echo ""
+    
+    echo "4. Formatear código:"
+    echo "   ${BLUE}npm run format:all${NC}"
+    echo ""
+    
+    if [ "$HAS_JQ" != true ]; then
+        print_warning "Recuerda revisar los archivos .additions para añadir dependencias manualmente"
+        echo ""
+    fi
+else
+    # Mensajes para otros modos
+    if [ ! -d "node_modules" ]; then
+        echo "1. Instalar dependencias:"
+        if [ -f "Makefile" ]; then
+            echo "   ${BLUE}make install${NC}"
+        else
+            echo "   ${BLUE}npm install && composer install${NC}"
+        fi
+        echo ""
+    fi
 
-echo "2. Formatear código según estándares WordPress:"
-echo "   ${BLUE}make format${NC}"
-echo ""
-echo "3. Verificar estándares de código:"
-echo "   ${BLUE}make test${NC}"
-echo ""
-echo "4. Iniciar desarrollo:"
-echo "   ${BLUE}make dev${NC}"
-echo ""
+    echo "2. Formatear código según estándares WordPress:"
+    if [ -f "Makefile" ]; then
+        echo "   ${BLUE}make format${NC}"
+    else
+        echo "   ${BLUE}npm run format:all${NC}"
+    fi
+    echo ""
+    
+    echo "3. Verificar estándares de código:"
+    if [ -f "Makefile" ]; then
+        echo "   ${BLUE}make test${NC}"
+    else
+        echo "   ${BLUE}npm run test:standards${NC}"
+    fi
+    echo ""
+    
+    if [ -f "Makefile" ]; then
+        echo "4. Iniciar desarrollo:"
+        echo "   ${BLUE}make dev${NC}"
+        echo ""
+    fi
+fi
 
 print_success "¡Listo para comenzar el desarrollo!"
 echo ""

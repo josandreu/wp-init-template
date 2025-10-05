@@ -1,1085 +1,607 @@
 #!/bin/bash
 
-# ================================================================================================
-# WordPress Project Initialization Script
-# ================================================================================================
-# Inicializa un nuevo proyecto WordPress desde esta plantilla
-# 
-# Características:
-# - Detecta archivos existentes y ofrece opciones
-# - 3 modos: Proyecto nuevo, Proyecto existente, Solo estándares
-# - Actualización selectiva de archivos
-# - Backup automático
-# - Compatible macOS y Linux
-# ================================================================================================
+# ====================================================================
+# WordPress Standards Configuration & Formatting Script
+# ====================================================================
+# Detecta, configura y formatea código WordPress automáticamente
+# ====================================================================
 
-set -e  # Exit on error
-set -o pipefail  # Fail on pipe errors
+set -e
+set -o pipefail
 
-# Colores para output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-NC='\033[0m' # No Color
+# Colores
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; MAGENTA='\033[0;35m'; NC='\033[0m'
 
-# Funciones de output
 print_success() { echo -e "${GREEN}✅ $1${NC}"; }
 print_error() { echo -e "${RED}❌ $1${NC}"; }
 print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 print_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
-print_question() { echo -e "${MAGENTA}❓ $1${NC}"; }
 
-# Función helper para sed compatible con macOS y Linux
-safe_sed() {
-    local pattern="$1"
-    local file="$2"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "$pattern" "$file"
-    else
-        sed -i "$pattern" "$file"
-    fi
-}
-
-# Validar slug (solo minúsculas, números y guiones)
 validate_slug() {
-    local slug="$1"
-    if [ -z "$slug" ]; then
-        print_error "El slug no puede estar vacío"
-        return 1
-    fi
-    if [[ ! "$slug" =~ ^[a-z0-9-]+$ ]]; then
-        print_error "El slug solo puede contener letras minúsculas, números y guiones"
-        print_info "Ejemplo válido: mi-proyecto"
-        return 1
-    fi
+    [ -z "$1" ] && { print_error "Slug vacío"; return 1; }
+    [[ ! "$1" =~ ^[a-z0-9-]+$ ]] && { print_error "Slug inválido"; return 1; }
     return 0
 }
 
-# Generar namespace de forma robusta
 generate_namespace() {
-    local slug="$1"
-    # Convertir a PascalCase: mi-proyecto → MiProyecto
-    echo "$slug" | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1' OFS=''
+    echo "$1" | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1' OFS=''
 }
 
-# Generar constante de forma robusta
 generate_constant() {
-    local slug="$1"
-    echo "$slug" | tr '[:lower:]' '[:upper:]' | tr '-' '_'
+    echo "$1" | tr '[:lower:]' '[:upper:]' | tr '-' '_'
 }
 
-# Detectar estructura WordPress
 detect_wordpress_structure() {
-    if [ -d "wordpress/wp-content" ]; then
-        WP_CONTENT_DIR="wordpress/wp-content"
-        return 0
-    elif [ -d "wp-content" ]; then
-        WP_CONTENT_DIR="wp-content"
-        return 0
-    else
-        return 1
-    fi
+    [ -d "wordpress/wp-content" ] && { WP_CONTENT_DIR="wordpress/wp-content"; return 0; }
+    [ -d "wp-content" ] && { WP_CONTENT_DIR="wp-content"; return 0; }
+    return 1
 }
 
-# Variables globales
-TEMP_FILES=""
-
-# Cleanup al salir o en error
-cleanup() {
-    if [ -n "$TEMP_FILES" ]; then
-        rm -f $TEMP_FILES 2>/dev/null || true
-    fi
+detect_custom_plugins() {
+    local plugins_dir="$WP_CONTENT_DIR/plugins"
+    [ ! -d "$plugins_dir" ] && { echo ""; return; }
+    
+    local -a custom_plugins=()
+    local exclude="akismet|hello|wordpress-importer|classic-editor|classic-widgets"
+    
+    for plugin_dir in "$plugins_dir"/*; do
+        [ ! -d "$plugin_dir" ] && continue
+        local name=$(basename "$plugin_dir")
+        [[ "$name" =~ $exclude ]] && continue
+        [ -n "$(find "$plugin_dir" -maxdepth 2 -name "*.php" 2>/dev/null)" ] && custom_plugins+=("$name")
+    done
+    
+    echo "${custom_plugins[@]}"
 }
 
-trap cleanup EXIT ERR INT TERM
+detect_custom_themes() {
+    local themes_dir="$WP_CONTENT_DIR/themes"
+    [ ! -d "$themes_dir" ] && { echo ""; return; }
+    
+    local -a custom_themes=()
+    local exclude="twenty"
+    
+    for theme_dir in "$themes_dir"/*; do
+        [ ! -d "$theme_dir" ] && continue
+        local name=$(basename "$theme_dir")
+        [[ "$name" =~ $exclude ]] && continue
+        { [ -f "$theme_dir/style.css" ] || [ -f "$theme_dir/functions.php" ]; } && custom_themes+=("$name")
+    done
+    
+    echo "${custom_themes[@]}"
+}
+
+detect_custom_mu_plugins() {
+    local mu_dir="$WP_CONTENT_DIR/mu-plugins"
+    [ ! -d "$mu_dir" ] && { echo ""; return; }
+    
+    local -a mu_plugins=()
+    for item in "$mu_dir"/*; do
+        [ -d "$item" ] || continue  # Solo directorios
+        local name=$(basename "$item")
+        # Excluir directorios especiales
+        [[ "$name" == "."* ]] || [[ "$name" == "index.php" ]] && continue
+        mu_plugins+=("$name")
+    done
+    
+    echo "${mu_plugins[@]}"
+}
 
 # Banner
 clear
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║  🚀 WordPress Standards & Formatting                         ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
-echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║  🚀 WordPress Project Initialization                           ║"
-echo "║  Plantilla con estándares WordPress configurados               ║"
-echo "╚════════════════════════════════════════════════════════════════╝"
-echo ""
-
-# Verificar que estamos en la raíz del proyecto
-if [ ! -f "package.json" ] && [ ! -f "composer.json" ]; then
-    print_error "No se encontró package.json ni composer.json"
-    print_info "Ejecuta este script desde la raíz del proyecto o un directorio con estos archivos"
-    exit 1
-fi
 
 # Verificar requisitos
-print_info "Verificando requisitos del sistema..."
-
-if ! command -v node >/dev/null 2>&1; then
-    print_error "Node.js no está instalado"
-    print_info "Instala Node.js desde: https://nodejs.org/"
-    exit 1
-fi
-
-if ! command -v npm >/dev/null 2>&1; then
-    print_error "npm no está instalado"
-    exit 1
-fi
-
+command -v node >/dev/null 2>&1 || { print_error "Node.js requerido"; exit 1; }
+command -v npm >/dev/null 2>&1 || { print_error "npm requerido"; exit 1; }
 COMPOSER_AVAILABLE=false
-if command -v composer >/dev/null 2>&1; then
-    COMPOSER_AVAILABLE=true
-    print_success "Composer disponible"
-else
-    print_warning "Composer no está instalado (recomendado)"
-    print_info "Instala desde: https://getcomposer.org/"
-fi
+command -v composer >/dev/null 2>&1 && COMPOSER_AVAILABLE=true
 
 print_success "Requisitos verificados"
 echo ""
 
-# ================================================================================================
-# DETECTAR ARCHIVOS EXISTENTES
-# ================================================================================================
-
+# Modo de operación
+echo "══════════════════════════════════════════════════════════════"
+echo "  Modo de Operación"
+echo "══════════════════════════════════════════════════════════════"
+echo "  1️⃣  Configurar y formatear proyecto"
+echo "  2️⃣  Solo configurar (sin formatear)"
+echo "  3️⃣  Solo formatear código existente"
 echo ""
-print_info "Detectando archivos existentes..."
-
-HAS_PACKAGE_JSON=false
-HAS_COMPOSER_JSON=false
-HAS_PHPCS=false
-HAS_ESLINT=false
-HAS_MAKEFILE=false
-
-[ -f "package.json" ] && HAS_PACKAGE_JSON=true && print_warning "package.json ya existe"
-[ -f "composer.json" ] && HAS_COMPOSER_JSON=true && print_warning "composer.json ya existe"
-[ -f "phpcs.xml.dist" ] && HAS_PHPCS=true && print_info "phpcs.xml.dist ya existe"
-[ -f "eslint.config.js" ] && HAS_ESLINT=true && print_info "eslint.config.js ya existe"
-[ -f "Makefile" ] && HAS_MAKEFILE=true && print_info "Makefile ya existe"
-
-# ================================================================================================
-# MODO DE OPERACIÓN
-# ================================================================================================
-
-echo "════════════════════════════════════════════════════════════════"
-echo "  Modo de Inicialización"
-echo "════════════════════════════════════════════════════════════════"
+read -p "Selecciona modo (1-3): " MODE
 echo ""
-echo "  1️⃣  Proyecto nuevo          - Plantilla limpia con my-project"
-echo "  2️⃣  Proyecto existente      - Reemplazar referencias actuales"
-echo "  3️⃣  Solo estándares         - Actualizar solo configuración"
-echo "  4️⃣  Añadir estándares       - Añadir archivos config a proyecto existente"
-echo ""
-read -p "Selecciona modo (1-4): " MODE
-echo ""
+
+FORMAT_CODE=false
+CONFIGURE_PROJECT=false
 
 case $MODE in
-    1)
-        print_info "Modo: Proyecto nuevo con referencias genéricas"
-        OLD_SLUG="my-project"
-        ;;
-    2)
-        print_info "Modo: Proyecto existente - reemplazar referencias"
-        ;;
-    3)
-        print_info "Modo: Solo actualizar estándares de código"
-        STANDARDS_ONLY=true
-        ;;
-    4)
-        print_info "Modo: Añadir estándares a proyecto existente"
-        ADD_STANDARDS_ONLY=true
-        ;;
-    *)
-        print_error "Opción inválida"
-        exit 1
-        ;;
+    1) CONFIGURE_PROJECT=true; FORMAT_CODE=true; print_info "Modo: Configurar y formatear" ;;
+    2) CONFIGURE_PROJECT=true; print_info "Modo: Solo configurar" ;;
+    3) FORMAT_CODE=true; print_info "Modo: Solo formatear" ;;
+    *) print_error "Opción inválida"; exit 1 ;;
 esac
 
-# ================================================================================================
-# SOLICITAR INFORMACIÓN DEL PROYECTO
-# ================================================================================================
-
-if [ "$STANDARDS_ONLY" != "true" ] && [ "$ADD_STANDARDS_ONLY" != "true" ]; then
-    echo ""
-    echo "════════════════════════════════════════════════════════════════"
-    echo "  Configuración del Proyecto"
-    echo "════════════════════════════════════════════════════════════════"
-    echo ""
-
-    # Detectar slug existente si es modo 2
-    if [ "$MODE" = "2" ]; then
-        echo "Detectando slug del proyecto existente..."
-        if [ -f "package.json" ]; then
-            CURRENT_SLUG=$(grep -o '"name": "[^"]*"' package.json | head -1 | cut -d'"' -f4 | sed 's/-wordpress$//')
-            print_info "Slug detectado: $CURRENT_SLUG"
-            read -p "¿Es correcto? (y/n): " CONFIRM_SLUG
-            if [[ ! $CONFIRM_SLUG =~ ^[Yy]$ ]]; then
-                read -p "Introduce el slug actual del proyecto: " CURRENT_SLUG
-            fi
-            OLD_SLUG="$CURRENT_SLUG"
-        else
-            read -p "Introduce el slug actual del proyecto a reemplazar: " OLD_SLUG
-        fi
-        echo ""
-    fi
-
-    # Nombre del proyecto
-    read -p "Nombre del proyecto (ej: mi-proyecto): " PROJECT_NAME
-    if [ -z "$PROJECT_NAME" ]; then
-        print_error "El nombre del proyecto es obligatorio"
-        exit 1
-    fi
-
-    # Convertir nombre a diferentes formatos
-    PROJECT_SLUG=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
-    PROJECT_CONSTANT=$(echo "$PROJECT_NAME" | tr '[:lower:]' '[:upper:]' | tr '-' '_' | tr ' ' '_')
-    PROJECT_NAMESPACE=$(echo "$PROJECT_NAME" | sed 's/-/ /g' | sed 's/_/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1' | tr -d ' ')
-
-    # URL local
-    read -p "URL local de desarrollo (ej: https://local.${PROJECT_SLUG}.com): " LOCAL_URL
-    if [ -z "$LOCAL_URL" ]; then
-        LOCAL_URL="https://local.${PROJECT_SLUG}.com"
-    fi
-
-    # Nombre del theme hijo
-    read -p "Nombre del theme hijo (ej: ${PROJECT_SLUG}-theme): " CHILD_THEME_NAME
-    if [ -z "$CHILD_THEME_NAME" ]; then
-        CHILD_THEME_NAME="${PROJECT_SLUG}-theme"
-    fi
-
-    # Nombre del plugin
-    read -p "Nombre del plugin de bloques (ej: ${PROJECT_SLUG}-custom-blocks): " PLUGIN_NAME
-    if [ -z "$PLUGIN_NAME" ]; then
-        PLUGIN_NAME="${PROJECT_SLUG}-custom-blocks"
-    fi
-
-    # Text domain
-    TEXT_DOMAIN="${PROJECT_SLUG}"
-
-    # Definir OLD_ variables si no están definidas
-    if [ "$MODE" = "1" ]; then
-        OLD_CONSTANT="MY_PROJECT"
-        OLD_NAMESPACE="MyProject"
-        OLD_THEME="my-project-theme"
-        OLD_PLUGIN="my-project-custom-blocks"
-        OLD_URL="https://local.my-project.com"
-    else
-        OLD_CONSTANT=$(echo "$OLD_SLUG" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
-        OLD_NAMESPACE=$(echo "$OLD_SLUG" | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1' | tr -d ' ')
-        OLD_THEME="${OLD_SLUG}-theme"
-        OLD_PLUGIN="${OLD_SLUG}-custom-blocks"
-        OLD_URL="https://local.${OLD_SLUG}.com"
-    fi
-
-    # Resumen
-    echo ""
-    echo "════════════════════════════════════════════════════════════════"
-    echo "  Resumen de la Configuración"
-    echo "════════════════════════════════════════════════════════════════"
-    echo ""
-    echo "Reemplazar: $OLD_SLUG → $PROJECT_SLUG"
-    echo "Namespace:  $OLD_NAMESPACE → $PROJECT_NAMESPACE"
-    echo "URL local:  $OLD_URL → $LOCAL_URL"
-    echo "Theme hijo: $OLD_THEME → $CHILD_THEME_NAME"
-    echo "Plugin:     $OLD_PLUGIN → $PLUGIN_NAME"
-    echo "Text domain: $TEXT_DOMAIN"
-    echo ""
-
-    read -p "¿Confirmar inicialización? (y/n): " CONFIRM
-    if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
-        print_warning "Inicialización cancelada"
-        exit 0
-    fi
-fi
-
-# ================================================================================================
-# ARCHIVOS OPCIONALES
-# ================================================================================================
-
 echo ""
 
-CREATE_MAKEFILE=true
-CREATE_README=true
-CREATE_GITHOOKS=true
-CREATE_CI=true
-
-# Solo hacer estas preguntas si NO es Modo 4
-if [ "$ADD_STANDARDS_ONLY" != "true" ]; then
-    print_info "Selección de archivos a crear/actualizar..."
-    echo ""
-    
-    if [ "$HAS_MAKEFILE" = true ]; then
-        read -p "¿Actualizar Makefile existente? (y/n): " resp
-        [[ ! $resp =~ ^[Yy]$ ]] && CREATE_MAKEFILE=false
-    fi
-
-    if [ -f "README.md" ]; then
-        read -p "¿Actualizar README.md existente? (y/n): " resp
-        [[ ! $resp =~ ^[Yy]$ ]] && CREATE_README=false
-    fi
-
-    read -p "¿Configurar Git hooks (Husky)? (y/n): " resp
-    [[ ! $resp =~ ^[Yy]$ ]] && CREATE_GITHOOKS=false
-
-    read -p "¿Crear configuración CI/CD (bitbucket-pipelines.yml)? (y/n): " resp
-    [[ ! $resp =~ ^[Yy]$ ]] && CREATE_CI=false
-fi
-
-# ================================================================================================
-# BACKUP
-# ================================================================================================
-
-if [ "$STANDARDS_ONLY" != "true" ] && [ "$ADD_STANDARDS_ONLY" != "true" ]; then
-    print_info "Creando backup de archivos originales..."
-    BACKUP_DIR="./backup-$(date +%Y%m%d-%H%M%S)"
-    mkdir -p "$BACKUP_DIR"
-
-    # Backup de archivos que existen
-    [ -f "composer.json" ] && cp composer.json "$BACKUP_DIR/" 2>/dev/null || true
-    [ -f "package.json" ] && cp package.json "$BACKUP_DIR/" 2>/dev/null || true
-    [ -f "phpcs.xml.dist" ] && cp phpcs.xml.dist "$BACKUP_DIR/" 2>/dev/null || true
-    [ -f "phpstan.neon.dist" ] && cp phpstan.neon.dist "$BACKUP_DIR/" 2>/dev/null || true
-    [ -f "eslint.config.js" ] && cp eslint.config.js "$BACKUP_DIR/" 2>/dev/null || true
-    [ "$CREATE_MAKEFILE" = true ] && [ -f "Makefile" ] && cp Makefile "$BACKUP_DIR/" 2>/dev/null || true
-    [ "$CREATE_README" = true ] && [ -f "README.md" ] && cp README.md "$BACKUP_DIR/" 2>/dev/null || true
-
-    print_success "Backup creado en: $BACKUP_DIR"
-fi
-
-# ================================================================================================
-# ACTUALIZAR ARCHIVOS
-# ================================================================================================
-
+# Detectar estructura WordPress
+detect_wordpress_structure || { print_error "Estructura WordPress no encontrada"; exit 1; }
+print_success "Estructura detectada: $WP_CONTENT_DIR"
 echo ""
-print_info "Actualizando archivos de configuración..."
 
-if [ "$STANDARDS_ONLY" != "true" ] && [ "$ADD_STANDARDS_ONLY" != "true" ]; then
-    # --- composer.json ---
-    if [ -f "composer.json" ]; then
-        print_info "Actualizando composer.json..."
-        safe_sed "s/${OLD_SLUG}/${PROJECT_SLUG}/g" composer.json
-        safe_sed "s/${OLD_NAMESPACE}/${PROJECT_NAMESPACE}/g" composer.json
-        print_success "composer.json actualizado"
-    fi
+# Detectar componentes
+print_info "Detectando componentes personalizados..."
+echo ""
 
-    # --- package.json ---
-    if [ -f "package.json" ]; then
-        print_info "Actualizando package.json..."
-        safe_sed "s/${OLD_SLUG}/${PROJECT_SLUG}/g" package.json
-        safe_sed "s/${OLD_PLUGIN}/${PLUGIN_NAME}/g" package.json
-        safe_sed "s/${OLD_THEME}/${CHILD_THEME_NAME}/g" package.json
-        safe_sed "s#${OLD_URL}#${LOCAL_URL}#g" package.json
-        print_success "package.json actualizado"
-    fi
+DETECTED_PLUGINS=($(detect_custom_plugins))
+DETECTED_THEMES=($(detect_custom_themes))
+DETECTED_MU_PLUGINS=($(detect_custom_mu_plugins))
 
-    # --- phpcs.xml.dist ---
-    if [ -f "phpcs.xml.dist" ]; then
-        print_info "Actualizando phpcs.xml.dist..."
-        safe_sed "s/${OLD_SLUG}_/${PROJECT_SLUG}_/g" phpcs.xml.dist
-        safe_sed "s/${OLD_CONSTANT}_/${PROJECT_CONSTANT}_/g" phpcs.xml.dist
-        safe_sed "s/${OLD_NAMESPACE}\\\\\\\\/${PROJECT_NAMESPACE}\\\\\\\\/g" phpcs.xml.dist
-        safe_sed "s/${OLD_PLUGIN}/${PLUGIN_NAME}/g" phpcs.xml.dist
-        safe_sed "s/${OLD_THEME}/${CHILD_THEME_NAME}/g" phpcs.xml.dist
-        print_success "phpcs.xml.dist actualizado"
-    fi
-
-    # --- phpstan.neon.dist ---
-    if [ -f "phpstan.neon.dist" ]; then
-        print_info "Actualizando phpstan.neon.dist..."
-        safe_sed "s/${OLD_PLUGIN}/${PLUGIN_NAME}/g" phpstan.neon.dist
-        safe_sed "s/${OLD_THEME}/${CHILD_THEME_NAME}/g" phpstan.neon.dist
-        print_success "phpstan.neon.dist actualizado"
-    fi
-
-    # --- eslint.config.js ---
-    if [ -f "eslint.config.js" ]; then
-        print_info "Actualizando eslint.config.js..."
-        safe_sed "s/${OLD_PLUGIN}/${PLUGIN_NAME}/g" eslint.config.js
-        safe_sed "s/${OLD_THEME}/${CHILD_THEME_NAME}/g" eslint.config.js
-        print_success "eslint.config.js actualizado"
-    fi
-
-    # --- Makefile ---
-    if [ "$CREATE_MAKEFILE" = true ] && [ -f "Makefile" ]; then
-        print_info "Actualizando Makefile..."
-        safe_sed "s#${OLD_URL}#${LOCAL_URL}#g" Makefile
-        safe_sed "s/${OLD_SLUG}/${PROJECT_SLUG}/g" Makefile
-        safe_sed "s/${OLD_PLUGIN}/${PLUGIN_NAME}/g" Makefile
-        safe_sed "s/${OLD_THEME}/${CHILD_THEME_NAME}/g" Makefile
-        print_success "Makefile actualizado"
-    fi
-
-    # --- README.md ---
-    if [ "$CREATE_README" = true ] && [ -f "README.md" ]; then
-        print_info "Actualizando README.md..."
-        safe_sed "s/${OLD_SLUG}/${PROJECT_SLUG}/g" README.md
-        safe_sed "s/${OLD_PLUGIN}/${PLUGIN_NAME}/g" README.md
-        safe_sed "s/${OLD_THEME}/${CHILD_THEME_NAME}/g" README.md
-        safe_sed "s#${OLD_URL}#${LOCAL_URL}#g" README.md
-        print_success "README.md actualizado"
-    fi
-fi
-
-# ================================================================================================
-# MODO 4: AÑADIR ESTÁNDARES A PROYECTO EXISTENTE
-# ================================================================================================
-
-if [ "$ADD_STANDARDS_ONLY" = "true" ]; then
+[ ${#DETECTED_PLUGINS[@]} -gt 0 ] && {
+    print_success "Plugins detectados:"
+    for p in "${DETECTED_PLUGINS[@]}"; do echo "  📦 $p"; done
     echo ""
-    echo "════════════════════════════════════════════════════════════════"
-    echo "  Configuración de Nombres"
-    echo "════════════════════════════════════════════════════════════════"
-    echo ""
-    
-    # Detectar estructura WordPress
-    if detect_wordpress_structure; then
-        print_success "Estructura WordPress detectada: $WP_CONTENT_DIR"
-    else
-        print_warning "No se detectó estructura WordPress estándar"
-        read -p "¿Continuar de todos modos? (y/n): " resp
-        if [[ ! $resp =~ ^[Yy]$ ]]; then
-            print_error "Inicialización cancelada"
-            exit 1
-        fi
-    fi
-    
-    echo ""
-    
-    # Detectar nombre del proyecto desde composer.json si existe
-    if [ -f "composer.json" ]; then
-        DETECTED_NAME=$(grep -o '"name": "[^"]*"' composer.json | head -1 | cut -d'"' -f4 | cut -d'/' -f2 | sed 's/-wordpress$//' 2>/dev/null || echo "")
-        if [ -n "$DETECTED_NAME" ]; then
-            echo ""
-            print_info "Proyecto detectado desde composer.json: ${GREEN}$DETECTED_NAME${NC}"
-            read -p "¿Usar este nombre? (y/n): " CONFIRM_NAME
-            echo ""
-            if [[ $CONFIRM_NAME =~ ^[Yy]$ ]]; then
-                PROJECT_SLUG="$DETECTED_NAME"
-                print_success "Usando: $PROJECT_SLUG"
-            else
-                print_info "OK, introduce un nombre diferente"
-            fi
-        else
-            print_info "No se pudo detectar el nombre del proyecto desde composer.json"
-        fi
-    fi
-    
-    # Si no se detectó o no se confirmó, preguntar y validar
-    echo ""
-    while [ -z "$PROJECT_SLUG" ]; do
-        echo -n "Nombre del proyecto (slug, ej: mi-proyecto): "
-        read PROJECT_SLUG
-        if ! validate_slug "$PROJECT_SLUG"; then
-            PROJECT_SLUG=""
-            echo ""
-        fi
-    done
-    
-    print_success "Nombre del proyecto: $PROJECT_SLUG"
-    echo ""
-    
-    # Preguntar por theme y plugin con validación
-    while true; do
-        echo -n "Nombre del theme principal (Enter para ${PROJECT_SLUG}-theme): "
-        read CHILD_THEME_NAME
-        CHILD_THEME_NAME=${CHILD_THEME_NAME:-"${PROJECT_SLUG}-theme"}
-        if validate_slug "$CHILD_THEME_NAME"; then
-            print_success "Theme: $CHILD_THEME_NAME"
-            break
-        fi
-        echo ""
-    done
-    
-    echo ""
-    while true; do
-        echo -n "Nombre del plugin de bloques (Enter para ${PROJECT_SLUG}-custom-blocks): "
-        read PLUGIN_NAME
-        PLUGIN_NAME=${PLUGIN_NAME:-"${PROJECT_SLUG}-custom-blocks"}
-        if validate_slug "$PLUGIN_NAME"; then
-            print_success "Plugin: $PLUGIN_NAME"
-            break
-        fi
-        echo ""
-    done
-    
-    # Generar variantes del nombre usando funciones robustas
-    PROJECT_CONSTANT=$(generate_constant "$PROJECT_SLUG")
-    PROJECT_NAMESPACE=$(generate_namespace "$PROJECT_SLUG")
-    TEXT_DOMAIN="$PROJECT_SLUG"
-    
-    # Verificar que las variables no estén vacías
-    if [ -z "$PROJECT_SLUG" ] || [ -z "$CHILD_THEME_NAME" ] || [ -z "$PLUGIN_NAME" ]; then
-        print_error "Error: Variables del proyecto vacías"
-        exit 1
-    fi
-    
-    echo ""
-    print_info "Configuración:"
-    echo "  • Proyecto: $PROJECT_SLUG"
-    echo "  • Theme: $CHILD_THEME_NAME"
-    echo "  • Plugin: $PLUGIN_NAME"
-    echo "  • Namespace: $PROJECT_NAMESPACE"
-    echo ""
-    
-    read -p "¿Continuar con esta configuración? (y/n): " CONFIRM_CONFIG
-    if [[ ! $CONFIRM_CONFIG =~ ^[Yy]$ ]]; then
-        print_error "Configuración cancelada"
-        exit 1
-    fi
-    
-    echo ""
-    print_info "Copiando y personalizando archivos de configuración..."
-    echo ""
-    
-    TEMPLATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    COPIED_FILES=()
-    
-    # Función auxiliar para copiar y personalizar archivo
-    copy_and_customize_file() {
-        local file="$1"
-        local template_file="$2"
-        local description="$3"
-        
-        local should_copy=false
-        
-        if [ ! -f "$file" ]; then
-            should_copy=true
-        else
-            print_warning "$file ya existe"
-            read -p "¿Sobrescribir con la versión personalizada? (y/n): " overwrite
-            if [[ $overwrite =~ ^[Yy]$ ]]; then
-                should_copy=true
-            fi
-        fi
-        
-        if [ "$should_copy" = true ]; then
-            cp "$TEMPLATE_DIR/$template_file" "$file"
-            COPIED_FILES+=("$file")
-            return 0
-        fi
-        return 1
-    }
-    
-    # phpcs.xml.dist
-    if copy_and_customize_file "phpcs.xml.dist" "phpcs.xml.dist" "WordPress PHP Standards"; then
-        safe_sed "s/my-project/${PROJECT_SLUG}/g" phpcs.xml.dist
-        safe_sed "s/my_project_/${PROJECT_SLUG}_/g" phpcs.xml.dist
-        safe_sed "s/MY_PROJECT_/${PROJECT_CONSTANT}_/g" phpcs.xml.dist
-        safe_sed "s/MyProject\\\\\\\\/${PROJECT_NAMESPACE}\\\\\\\\/g" phpcs.xml.dist
-        safe_sed "s/my-project-custom-blocks/${PLUGIN_NAME}/g" phpcs.xml.dist
-        safe_sed "s/my-project-theme/${CHILD_THEME_NAME}/g" phpcs.xml.dist
-        print_success "phpcs.xml.dist copiado y personalizado"
-    fi
-    
-    # phpstan.neon.dist
-    if copy_and_customize_file "phpstan.neon.dist" "phpstan.neon.dist" "PHP Static Analysis"; then
-        safe_sed "s/my-project-custom-blocks/${PLUGIN_NAME}/g" phpstan.neon.dist
-        safe_sed "s/my-project-theme/${CHILD_THEME_NAME}/g" phpstan.neon.dist
-        print_success "phpstan.neon.dist copiado y personalizado"
-    fi
-    
-    # eslint.config.js
-    if copy_and_customize_file "eslint.config.js" "eslint.config.js" "WordPress JS Standards"; then
-        safe_sed "s/my-project-custom-blocks/${PLUGIN_NAME}/g" eslint.config.js
-        safe_sed "s/my-project-theme/${CHILD_THEME_NAME}/g" eslint.config.js
-        print_success "eslint.config.js copiado y personalizado"
-    fi
-    
-    # commitlint.config.cjs
-    if copy_and_customize_file "commitlint.config.cjs" "commitlint.config.cjs" "Conventional Commits"; then
-        print_success "commitlint.config.cjs copiado"
-    fi
-    
-    if [ ! -f ".gitignore" ]; then
-        if [ -f "$TEMPLATE_DIR/.gitignore.template" ]; then
-            cp "$TEMPLATE_DIR/.gitignore.template" .gitignore
-            COPIED_FILES+=(".gitignore")
-            print_success ".gitignore copiado"
-        fi
-    else
-        print_info ".gitignore ya existe"
-    fi
-    
-    # ========================================
-    # CREAR/FUSIONAR package.json
-    # ========================================
-    
-    echo ""
-    
-    # Verificar si jq está disponible
-    HAS_JQ=false
-    if command -v jq >/dev/null 2>&1; then
-        HAS_JQ=true
-    fi
-    
-    if [ ! -f "package.json" ]; then
-        # Crear package.json desde cero
-        print_info "Creando package.json..."
-        
-        cat > package.json << EOF
-{
-  "name": "${PROJECT_SLUG}-wordpress",
-  "version": "1.0.0",
-  "description": "WordPress project with coding standards",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "lint:php": "./vendor/bin/phpcs --standard=phpcs.xml.dist",
-    "lint:php:fix": "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
-    "lint:js": "eslint '**/*.{js,jsx,ts,tsx}' --max-warnings=0 --cache",
-    "lint:js:fix": "eslint '**/*.{js,jsx,ts,tsx}' --fix --cache",
-    "lint:css": "stylelint '**/*.{css,scss}' --cache",
-    "lint:css:fix": "stylelint '**/*.{css,scss}' --fix --cache",
-    "format:js": "prettier --write '**/*.{js,jsx,ts,tsx,json,md}' --cache",
-    "format:css": "prettier --write '**/*.{css,scss}' --cache",
-    "format:all": "npm-run-all format:js format:css lint:php:fix",
-    "prepare": "husky install",
-    "test:standards": "npm-run-all lint:js lint:css lint:php"
-  },
-  "devDependencies": {
-    "@wordpress/eslint-plugin": "^22.14.0",
-    "@wordpress/prettier-config": "^4.11.0",
-    "@wordpress/stylelint-config": "^20.0.2",
-    "eslint": "^9.33.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^15.3.0",
-    "npm-run-all": "^4.1.5",
-    "prettier": "^3.4.2",
-    "stylelint": "^14.16.1",
-    "@commitlint/cli": "^19.8.1",
-    "@commitlint/config-conventional": "^19.8.1"
-  },
-  "lint-staged": {
-    "**/*.{js,jsx,ts,tsx}": [
-      "eslint --fix --cache --max-warnings=0",
-      "prettier --write --cache"
-    ],
-    "**/*.{css,scss}": [
-      "stylelint --fix --cache",
-      "prettier --write --cache"
-    ],
-    "**/*.php": [
-      "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
-      "./vendor/bin/phpcs --standard=phpcs.xml.dist"
-    ],
-    "*.{json,md,yml,yaml}": [
-      "prettier --write --cache"
-    ]
-  }
-}
-EOF
-        print_success "package.json creado"
-        
-    elif [ -f "package.json" ]; then
-        # Actualizar package.json existente
-        print_info "Actualizando package.json existente..."
-        
-        if [ "$HAS_JQ" = true ]; then
-            # Merge automático con jq
-            print_info "jq detectado - haciendo merge automático..."
-            
-            # Backup
-            cp package.json package.json.backup
-            
-            # Añadir devDependencies
-            jq '.devDependencies += {
-              "@wordpress/eslint-plugin": "^22.14.0",
-              "@wordpress/prettier-config": "^4.11.0",
-              "@wordpress/stylelint-config": "^20.0.2",
-              "eslint": "^9.33.0",
-              "husky": "^9.1.7",
-              "lint-staged": "^15.3.0",
-              "npm-run-all": "^4.1.5",
-              "prettier": "^3.4.2",
-              "stylelint": "^14.16.1",
-              "@commitlint/cli": "^19.8.1",
-              "@commitlint/config-conventional": "^19.8.1"
-            } | with_entries(select(.value != null))' package.json > package.json.tmp
-            
-            # Añadir scripts esenciales
-            jq '.scripts += {
-              "lint:php": "./vendor/bin/phpcs --standard=phpcs.xml.dist",
-              "lint:php:fix": "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
-              "lint:js": "eslint \"**/*.{js,jsx,ts,tsx}\" --max-warnings=0 --cache",
-              "lint:js:fix": "eslint \"**/*.{js,jsx,ts,tsx}\" --fix --cache",
-              "lint:css": "stylelint \"**/*.{css,scss}\" --cache",
-              "lint:css:fix": "stylelint \"**/*.{css,scss}\" --fix --cache",
-              "format:js": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\" --cache",
-              "format:css": "prettier --write \"**/*.{css,scss}\" --cache",
-              "format:all": "npm-run-all format:js format:css lint:php:fix",
-              "prepare": "husky install",
-              "test:standards": "npm-run-all lint:js lint:css lint:php"
-            } | with_entries(select(.value != null))' package.json.tmp > package.json
-            
-            # Añadir lint-staged si no existe
-            if ! jq -e '.["lint-staged"]' package.json > /dev/null 2>&1; then
-                jq '. + {
-                  "lint-staged": {
-                    "**/*.{js,jsx,ts,tsx}": [
-                      "eslint --fix --cache --max-warnings=0",
-                      "prettier --write --cache"
-                    ],
-                    "**/*.{css,scss}": [
-                      "stylelint --fix --cache",
-                      "prettier --write --cache"
-                    ],
-                    "**/*.php": [
-                      "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
-                      "./vendor/bin/phpcs --standard=phpcs.xml.dist"
-                    ],
-                    "*.{json,md,yml,yaml}": [
-                      "prettier --write --cache"
-                    ]
-                  }
-                }' package.json > package.json.tmp && mv package.json.tmp package.json
-            fi
-            
-            rm -f package.json.tmp
-            print_success "package.json actualizado (backup: package.json.backup)"
-        else
-            # Sin jq - crear archivo de ayuda
-            print_warning "jq no está disponible - creando archivo de referencia..."
-            
-            cat > package.json.additions << 'EOF'
-// ========================================
-// AÑADIR A package.json
-// ========================================
-
-// 1. En "devDependencies":
-{
-  "@wordpress/eslint-plugin": "^22.14.0",
-  "@wordpress/prettier-config": "^4.11.0",
-  "@wordpress/stylelint-config": "^20.0.2",
-  "eslint": "^9.33.0",
-  "husky": "^9.1.7",
-  "lint-staged": "^15.3.0",
-  "npm-run-all": "^4.1.5",
-  "prettier": "^3.4.2",
-  "stylelint": "^14.16.1",
-  "@commitlint/cli": "^19.8.1",
-  "@commitlint/config-conventional": "^19.8.1"
 }
 
-// 2. En "scripts":
-{
-  "lint:php": "./vendor/bin/phpcs --standard=phpcs.xml.dist",
-  "lint:php:fix": "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
-  "lint:js": "eslint '**/*.{js,jsx,ts,tsx}' --max-warnings=0 --cache",
-  "lint:js:fix": "eslint '**/*.{js,jsx,ts,tsx}' --fix --cache",
-  "lint:css": "stylelint '**/*.{css,scss}' --cache",
-  "lint:css:fix": "stylelint '**/*.{css,scss}' --fix --cache",
-  "format:js": "prettier --write '**/*.{js,jsx,ts,tsx,json,md}' --cache",
-  "format:css": "prettier --write '**/*.{css,scss}' --cache",
-  "format:all": "npm-run-all format:js format:css lint:php:fix",
-  "prepare": "husky install",
-  "test:standards": "npm-run-all lint:js lint:css lint:php"
-}
-
-// 3. Añadir configuración "lint-staged":
-{
-  "lint-staged": {
-    "**/*.{js,jsx,ts,tsx}": [
-      "eslint --fix --cache --max-warnings=0",
-      "prettier --write --cache"
-    ],
-    "**/*.{css,scss}": [
-      "stylelint --fix --cache",
-      "prettier --write --cache"
-    ],
-    "**/*.php": [
-      "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
-      "./vendor/bin/phpcs --standard=phpcs.xml.dist"
-    ],
-    "*.{json,md,yml,yaml}": [
-      "prettier --write --cache"
-    ]
-  }
-}
-EOF
-            print_success "Archivo creado: package.json.additions"
-            print_info "Revisa y añade manualmente las dependencias y scripts"
-        fi
-    fi
-    
-    # ========================================
-    # CREAR/FUSIONAR composer.json
-    # ========================================
-    
-    if [ ! -f "composer.json" ]; then
-        # Crear composer.json desde cero
-        echo ""
-        print_info "Creando composer.json..."
-        
-        cat > composer.json << EOF
-{
-  "name": "flat101/${PROJECT_SLUG}-wordpress",
-  "description": "WordPress project with coding standards",
-  "type": "project",
-  "require": {
-    "php": ">=8.1"
-  },
-  "require-dev": {
-    "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
-    "php-stubs/wordpress-stubs": "^6.2",
-    "phpcsstandards/phpcsextra": "^1.4",
-    "phpcsstandards/phpcsutils": "^1.1",
-    "phpstan/phpstan": "^2.0",
-    "szepeviktor/phpstan-wordpress": "^1.3",
-    "wp-coding-standards/wpcs": "^3.2"
-  },
-  "scripts": {
-    "lint": "phpcs --standard=phpcs.xml.dist",
-    "lint:fix": "phpcbf --standard=phpcs.xml.dist",
-    "analyze": "phpstan analyse --no-progress",
-    "test": "phpcs && phpstan analyse"
-  },
-  "config": {
-    "allow-plugins": {
-      "dealerdirect/phpcodesniffer-composer-installer": true
-    }
-  }
-}
-EOF
-        print_success "composer.json creado"
-        
-    elif [ -f "composer.json" ]; then
-        # Actualizar composer.json existente
-        echo ""
-        print_info "Actualizando composer.json existente..."
-        
-        if [ "$HAS_JQ" = true ]; then
-            # Merge automático con jq
-            print_info "Haciendo merge automático de composer.json..."
-            
-            # Backup
-            cp composer.json composer.json.backup
-            
-            # Añadir require-dev
-            jq '."require-dev" += {
-              "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
-              "php-stubs/wordpress-stubs": "^6.2",
-              "phpcsstandards/phpcsextra": "^1.4",
-              "phpcsstandards/phpcsutils": "^1.1",
-              "phpstan/phpstan": "^2.0",
-              "szepeviktor/phpstan-wordpress": "^1.3",
-              "wp-coding-standards/wpcs": "^3.2"
-            } | with_entries(select(.value != null))' composer.json > composer.json.tmp
-            
-            # Añadir scripts
-            jq '.scripts += {
-              "lint": "phpcs --standard=phpcs.xml.dist",
-              "lint:fix": "phpcbf --standard=phpcs.xml.dist",
-              "analyze": "phpstan analyse --no-progress",
-              "test": "phpcs && phpstan analyse"
-            } | with_entries(select(.value != null))' composer.json.tmp > composer.json
-            
-            rm -f composer.json.tmp
-            print_success "composer.json actualizado (backup: composer.json.backup)"
-        else
-            # Sin jq - crear archivo de ayuda
-            print_warning "Creando archivo de referencia para composer.json..."
-            
-            cat > composer.json.additions << 'EOF'
-// ========================================
-// AÑADIR A composer.json
-// ========================================
-
-// 1. En "require-dev":
-{
-  "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
-  "php-stubs/wordpress-stubs": "^6.2",
-  "phpcsstandards/phpcsextra": "^1.4",
-  "phpcsstandards/phpcsutils": "^1.1",
-  "phpstan/phpstan": "^2.0",
-  "szepeviktor/phpstan-wordpress": "^1.3",
-  "wp-coding-standards/wpcs": "^3.2"
-}
-
-// 2. En "scripts":
-{
-  "lint": "phpcs --standard=phpcs.xml.dist",
-  "lint:fix": "phpcbf --standard=phpcs.xml.dist",
-  "analyze": "phpstan analyse --no-progress",
-  "test": "phpcs && phpstan analyse"
-}
-EOF
-            print_success "Archivo creado: composer.json.additions"
-            print_info "Revisa y añade manualmente las dependencias y scripts"
-        fi
-    fi
-    
-    # ========================================
-    # RESUMEN MODO 4
-    # ========================================
-    
+[ ${#DETECTED_THEMES[@]} -gt 0 ] && {
+    print_success "Temas detectados:"
+    for t in "${DETECTED_THEMES[@]}"; do echo "  🎨 $t"; done
     echo ""
-    echo "════════════════════════════════════════════════════════════════"
-    echo "  ✅ Archivos de Configuración Añadidos"
-    echo "════════════════════════════════════════════════════════════════"
+}
+
+[ ${#DETECTED_MU_PLUGINS[@]} -gt 0 ] && {
+    print_success "MU-Plugins detectados:"
+    for m in "${DETECTED_MU_PLUGINS[@]}"; do echo "  🔌 $m"; done
+    echo ""
+}
+
+# Selección de componentes
+SELECTED_PLUGINS=()
+SELECTED_THEMES=()
+SELECTED_MU_PLUGINS=()
+
+if [ "$CONFIGURE_PROJECT" = true ]; then
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  Selección de Componentes"
+    echo "══════════════════════════════════════════════════════════════"
     echo ""
     
-    if [ ${#COPIED_FILES[@]} -gt 0 ]; then
-        print_info "Archivos copiados:"
-        for file in "${COPIED_FILES[@]}"; do
-            echo "  ✅ $file"
+    [ ${#DETECTED_PLUGINS[@]} -gt 0 ] && {
+        echo "--- Plugins ---"
+        for plugin in "${DETECTED_PLUGINS[@]}"; do
+            read -p "¿Incluir '$plugin'? (y/n): " resp
+            [[ $resp =~ ^[Yy]$ ]] && SELECTED_PLUGINS+=("$plugin")
         done
         echo ""
-    fi
+    }
     
-    if [ "$HAS_JQ" = true ]; then
-        print_success "package.json y composer.json actualizados automáticamente"
-        print_info "Se crearon backups: package.json.backup y composer.json.backup"
-    else
-        print_warning "Instala 'jq' para merge automático: brew install jq"
-        print_info "Archivos de referencia creados:"
-        echo "  📄 package.json.additions"
-        echo "  📄 composer.json.additions"
-    fi
-    
-    echo ""
-    print_info "Próximos pasos:"
-    echo "  1. Instalar dependencias: npm install && composer install"
-    echo "  2. Configurar Husky: npm run prepare"
-    echo "  3. Verificar estándares: npm run lint:js && npm run lint:php"
-    echo ""
-fi
-
-# ================================================================================================
-# CREAR ARCHIVO DE CONFIGURACIÓN
-# ================================================================================================
-
-if [ "$STANDARDS_ONLY" != "true" ] && [ "$ADD_STANDARDS_ONLY" != "true" ]; then
-    print_info "Creando archivo de configuración del proyecto..."
-
-    cat > .project-config << EOF
-# Configuración del Proyecto WordPress
-# Generado automáticamente por init-project.sh
-# Fecha: $(date +%Y-%m-%d\ %H:%M:%S)
-
-PROJECT_NAME="$PROJECT_NAME"
-PROJECT_SLUG="$PROJECT_SLUG"
-PROJECT_CONSTANT="$PROJECT_CONSTANT"
-PROJECT_NAMESPACE="$PROJECT_NAMESPACE"
-LOCAL_URL="$LOCAL_URL"
-CHILD_THEME_NAME="$CHILD_THEME_NAME"
-PLUGIN_NAME="$PLUGIN_NAME"
-TEXT_DOMAIN="$TEXT_DOMAIN"
-
-# Slug anterior (para referencia)
-OLD_SLUG="$OLD_SLUG"
-
-# URLs de entornos
-STAGING_URL="https://dev.${PROJECT_SLUG}.levelstage.com"
-PRODUCTION_URL="https://${PROJECT_SLUG}.com"
-EOF
-
-    print_success "Archivo .project-config creado"
-fi
-
-# ================================================================================================
-# RESUMEN FINAL
-# ================================================================================================
-
-echo ""
-echo "════════════════════════════════════════════════════════════════"
-echo "  🎉 ¡Inicialización Completada!"
-echo "════════════════════════════════════════════════════════════════"
-echo ""
-
-if [ "$STANDARDS_ONLY" = "true" ]; then
-    print_success "Estándares de código actualizados"
-elif [ "$ADD_STANDARDS_ONLY" = "true" ]; then
-    print_success "Estándares añadidos al proyecto existente"
-    echo ""
-    print_info "Tu proyecto ahora incluye:"
-    [ -f "phpcs.xml.dist" ] && echo "  • phpcs.xml.dist (WordPress PHP Standards)"
-    [ -f "phpstan.neon.dist" ] && echo "  • phpstan.neon.dist (PHP Static Analysis)"
-    [ -f "eslint.config.js" ] && echo "  • eslint.config.js (WordPress JS Standards)"
-    [ -f "commitlint.config.cjs" ] && echo "  • commitlint.config.cjs (Conventional Commits)"
-    [ -f "package.json.backup" ] && echo "  • package.json (fusionado con backup creado)"
-    [ -f "composer.json.backup" ] && echo "  • composer.json (fusionado con backup creado)"
-else
-    print_success "Proyecto '$PROJECT_NAME' configurado correctamente"
-    echo ""
-    print_info "Archivos actualizados:"
-    [ -f "composer.json" ] && echo "  • composer.json"
-    [ -f "package.json" ] && echo "  • package.json"
-    [ -f "phpcs.xml.dist" ] && echo "  • phpcs.xml.dist (WordPress PHP Standards)"
-    [ -f "phpstan.neon.dist" ] && echo "  • phpstan.neon.dist (PHP Static Analysis)"
-    [ -f "eslint.config.js" ] && echo "  • eslint.config.js (WordPress JS Standards)"
-    [ "$CREATE_MAKEFILE" = true ] && [ -f "Makefile" ] && echo "  • Makefile"
-    [ "$CREATE_README" = true ] && [ -f "README.md" ] && echo "  • README.md"
-    echo ""
-    [ -f ".project-config" ] && print_info "Configuración guardada en: .project-config"
-    [ -d "$BACKUP_DIR" ] && print_info "Backup de archivos originales en: $BACKUP_DIR"
-fi
-
-echo ""
-echo "════════════════════════════════════════════════════════════════"
-echo "  📋 Próximos Pasos"
-echo "════════════════════════════════════════════════════════════════"
-echo ""
-
-if [ "$ADD_STANDARDS_ONLY" = "true" ]; then
-    # Mensajes específicos para Modo 4
-    echo "1. Instalar dependencias:"
-    echo "   ${BLUE}npm install${NC}"
-    if [ "$COMPOSER_AVAILABLE" = true ]; then
-        echo "   ${BLUE}composer install${NC}"
-    fi
-    echo ""
-    
-    echo "2. Configurar Git hooks:"
-    echo "   ${BLUE}npm run prepare${NC}"
-    echo ""
-    
-    echo "3. Verificar estándares:"
-    echo "   ${BLUE}npm run lint:js${NC}"
-    echo "   ${BLUE}npm run lint:css${NC}"
-    echo "   ${BLUE}npm run lint:php${NC}"
-    echo ""
-    
-    echo "4. Formatear código:"
-    echo "   ${BLUE}npm run format:all${NC}"
-    echo ""
-    
-    if [ "$HAS_JQ" != true ]; then
-        print_warning "Recuerda revisar los archivos .additions para añadir dependencias manualmente"
+    [ ${#DETECTED_THEMES[@]} -gt 0 ] && {
+        echo "--- Temas ---"
+        for theme in "${DETECTED_THEMES[@]}"; do
+            read -p "¿Incluir '$theme'? (y/n): " resp
+            [[ $resp =~ ^[Yy]$ ]] && SELECTED_THEMES+=("$theme")
+        done
         echo ""
-    fi
+    }
+    
+    [ ${#DETECTED_MU_PLUGINS[@]} -gt 0 ] && {
+        echo "--- MU-Plugins ---"
+        for mu in "${DETECTED_MU_PLUGINS[@]}"; do
+            read -p "¿Incluir '$mu'? (y/n): " resp
+            [[ $resp =~ ^[Yy]$ ]] && SELECTED_MU_PLUGINS+=("$mu")
+        done
+        echo ""
+    }
+    
+    [ ${#SELECTED_PLUGINS[@]} -eq 0 ] && [ ${#SELECTED_THEMES[@]} -eq 0 ] && [ ${#SELECTED_MU_PLUGINS[@]} -eq 0 ] && {
+        print_error "No se seleccionó ningún componente"
+        exit 1
+    }
+    
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  Resumen"
+    echo "══════════════════════════════════════════════════════════════"
+    echo ""
+    [ ${#SELECTED_PLUGINS[@]} -gt 0 ] && {
+        echo "Plugins (${#SELECTED_PLUGINS[@]}):"
+        for p in "${SELECTED_PLUGINS[@]}"; do echo "  ✅ $p"; done
+        echo ""
+    }
+    [ ${#SELECTED_THEMES[@]} -gt 0 ] && {
+        echo "Temas (${#SELECTED_THEMES[@]}):"
+        for t in "${SELECTED_THEMES[@]}"; do echo "  ✅ $t"; done
+        echo ""
+    }
+    [ ${#SELECTED_MU_PLUGINS[@]} -gt 0 ] && {
+        echo "MU-Plugins (${#SELECTED_MU_PLUGINS[@]}):"
+        for m in "${SELECTED_MU_PLUGINS[@]}"; do echo "  ✅ $m"; done
+        echo ""
+    }
+    
+    read -p "¿Continuar? (y/n): " CONFIRM
+    [[ ! $CONFIRM =~ ^[Yy]$ ]] && { print_warning "Cancelado"; exit 0; }
 else
-    # Mensajes para otros modos
-    if [ ! -d "node_modules" ]; then
-        echo "1. Instalar dependencias:"
-        if [ -f "Makefile" ]; then
-            echo "   ${BLUE}make install${NC}"
+    # Modo 3: usar todos los componentes detectados
+    SELECTED_PLUGINS=("${DETECTED_PLUGINS[@]}")
+    SELECTED_THEMES=("${DETECTED_THEMES[@]}")
+    SELECTED_MU_PLUGINS=("${DETECTED_MU_PLUGINS[@]}")
+    
+    # Verificar que hay componentes para formatear
+    if [ ${#SELECTED_PLUGINS[@]} -eq 0 ] && [ ${#SELECTED_THEMES[@]} -eq 0 ] && [ ${#SELECTED_MU_PLUGINS[@]} -eq 0 ]; then
+        print_error "No se encontraron componentes personalizados para formatear"
+        exit 1
+    fi
+fi
+
+# Nombre del proyecto
+echo ""
+echo "══════════════════════════════════════════════════════════════"
+echo "  Configuración del Proyecto"
+echo "══════════════════════════════════════════════════════════════"
+echo ""
+
+PROJECT_SLUG=""
+
+# Intentar detectar desde composer.json
+[ -f "composer.json" ] && {
+    DETECTED=$(grep -o '"name": "[^"]*"' composer.json | head -1 | cut -d'"' -f4 | cut -d'/' -f2 | sed 's/-wordpress$//')
+    [ -n "$DETECTED" ] && {
+        print_info "Detectado desde composer.json: $DETECTED"
+        read -p "¿Usar este nombre? (y/n): " resp
+        [[ $resp =~ ^[Yy]$ ]] && PROJECT_SLUG="$DETECTED"
+    }
+}
+
+# Fallback: intentar desde package.json
+[ -z "$PROJECT_SLUG" ] && [ -f "package.json" ] && {
+    DETECTED=$(grep -o '"name": "[^"]*"' package.json | head -1 | cut -d'"' -f4 | sed 's/-wordpress$//')
+    [ -n "$DETECTED" ] && {
+        print_info "Detectado desde package.json: $DETECTED"
+        read -p "¿Usar este nombre? (y/n): " resp
+        [[ $resp =~ ^[Yy]$ ]] && PROJECT_SLUG="$DETECTED"
+    }
+}
+
+while [ -z "$PROJECT_SLUG" ]; do
+    read -p "Nombre del proyecto (slug): " PROJECT_SLUG
+    validate_slug "$PROJECT_SLUG" || PROJECT_SLUG=""
+done
+
+print_success "Proyecto: $PROJECT_SLUG"
+echo ""
+
+PROJECT_CONSTANT=$(generate_constant "$PROJECT_SLUG")
+PROJECT_NAMESPACE=$(generate_namespace "$PROJECT_SLUG")
+TEXT_DOMAIN="$PROJECT_SLUG"
+
+# Generar archivos de configuración
+if [ "$CONFIGURE_PROJECT" = true ]; then
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  Generando Archivos de Configuración"
+    echo "══════════════════════════════════════════════════════════════"
+    echo ""
+    
+    # Backup
+    BACKUP_DIR="./backup-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$BACKUP_DIR"
+    for f in phpcs.xml.dist phpstan.neon.dist eslint.config.js; do
+        [ -f "$f" ] && cp "$f" "$BACKUP_DIR/"
+    done
+    [ "$(ls -A $BACKUP_DIR 2>/dev/null)" ] && print_success "Backup: $BACKUP_DIR" || rm -rf "$BACKUP_DIR"
+    echo ""
+    
+    # Construir prefixes y text domains
+    PREFIXES=""
+    TEXT_DOMAINS="                <element value=\"${TEXT_DOMAIN}\"/>\n"
+    
+    add_component() {
+        local name="$1"
+        local prefix=$(echo "$name" | tr '-' '_')
+        local constant=$(generate_constant "$name")
+        local namespace=$(generate_namespace "$name")
+        PREFIXES+="                <element value=\"${prefix}_\"/>\n"
+        PREFIXES+="                <element value=\"${constant}_\"/>\n"
+        # Escapar correctamente para XML
+        PREFIXES+="                <element value=\"${namespace}\\\\\"/>\n"
+        TEXT_DOMAINS+="                <element value=\"${name}\"/>\n"
+    }
+    
+    add_component "$PROJECT_SLUG"
+    for p in "${SELECTED_PLUGINS[@]}"; do add_component "$p"; done
+    for t in "${SELECTED_THEMES[@]}"; do add_component "$t"; done
+    
+    # Construir rutas
+    FILES=""
+    for p in "${SELECTED_PLUGINS[@]}"; do FILES+="    <file>${WP_CONTENT_DIR}/plugins/${p}</file>\n"; done
+    for t in "${SELECTED_THEMES[@]}"; do FILES+="    <file>${WP_CONTENT_DIR}/themes/${t}</file>\n"; done
+    for m in "${SELECTED_MU_PLUGINS[@]}"; do FILES+="    <file>${WP_CONTENT_DIR}/mu-plugins/${m}</file>\n"; done
+    
+    # phpcs.xml.dist
+    print_info "Generando phpcs.xml.dist..."
+    cat > phpcs.xml.dist << PHPCS_EOF
+<?xml version="1.0"?>
+<ruleset name="WordPress Project PHP Standards">
+    <description>PHP CodeSniffer rules for WordPress project</description>
+
+    <rule ref="WordPress">
+        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+        <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+        <exclude name="Squiz.Commenting.FunctionComment.Missing"/>
+        <exclude name="Squiz.Commenting.FileComment.Missing"/>
+        <exclude name="Squiz.Commenting.ClassComment.Missing"/>
+        <exclude name="Squiz.Commenting.VariableComment.Missing"/>
+    </rule>
+
+    <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+        <properties>
+            <property name="prefixes" type="array">
+$(echo -e "$PREFIXES")            </property>
+        </properties>
+    </rule>
+
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+$(echo -e "$TEXT_DOMAINS")            </property>
+        </properties>
+    </rule>
+
+    <!-- Files to check -->
+$(echo -e "$FILES")
+    <!-- Exclude directories -->
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/build/*</exclude-pattern>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/tests/*</exclude-pattern>
+    <exclude-pattern>*.min.js</exclude-pattern>
+    <exclude-pattern>${WP_CONTENT_DIR%/*}/wp-admin/*</exclude-pattern>
+    <exclude-pattern>${WP_CONTENT_DIR%/*}/wp-includes/*</exclude-pattern>
+
+    <arg name="extensions" value="php"/>
+    <arg value="p"/>
+    <arg value="s"/>
+    <arg name="parallel" value="8"/>
+    <config name="ignore_warnings_on_exit" value="1"/>
+</ruleset>
+PHPCS_EOF
+    
+    print_success "phpcs.xml.dist generado"
+    
+    # phpstan.neon.dist
+    print_info "Generando phpstan.neon.dist..."
+    PATHS=""
+    EXCLUDES=""
+    for p in "${SELECTED_PLUGINS[@]}"; do
+        PATHS+="    - ${WP_CONTENT_DIR}/plugins/${p}/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/build/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/vendor/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/node_modules/\n"
+    done
+    for t in "${SELECTED_THEMES[@]}"; do
+        PATHS+="    - ${WP_CONTENT_DIR}/themes/${t}/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/themes/${t}/build/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/themes/${t}/vendor/\n"
+    done
+    for m in "${SELECTED_MU_PLUGINS[@]}"; do
+        PATHS+="    - ${WP_CONTENT_DIR}/mu-plugins/${m}/\n"
+    done
+    
+    cat > phpstan.neon.dist << PHPSTAN_EOF
+parameters:
+  level: 5
+
+  paths:
+$(echo -e "$PATHS")
+  excludePaths:
+$(echo -e "$EXCLUDES")    - ${WP_CONTENT_DIR%/*}/wp-admin/
+    - ${WP_CONTENT_DIR%/*}/wp-includes/
+
+  ignoreErrors:
+    - '#Call to an undefined method#'
+    - '#Access to an undefined property#'
+    - '#Undefined variable#'
+
+  phpVersion: 80100
+  checkMissingTypehints: false
+PHPSTAN_EOF
+    
+    print_success "phpstan.neon.dist generado"
+    
+    # eslint.config.js
+    print_info "Generando eslint.config.js..."
+    ESLINT_FILES=""
+    for p in "${SELECTED_PLUGINS[@]}"; do
+        ESLINT_FILES+="      '${WP_CONTENT_DIR}/plugins/${p}/**/*.{js,jsx,ts,tsx}',\n"
+    done
+    for t in "${SELECTED_THEMES[@]}"; do
+        ESLINT_FILES+="      '${WP_CONTENT_DIR}/themes/${t}/**/*.{js,jsx,ts,tsx}',\n"
+    done
+    
+    cat > eslint.config.js << 'ESLINT_EOF'
+import js from '@eslint/js';
+import globals from 'globals';
+
+export default [
+  {
+    ignores: ['build/', 'node_modules/', 'vendor/', '**/*.min.js'],
+  },
+  {
+    ...js.configs.recommended,
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: { ...globals.browser, ...globals.node, wp: 'readonly', jQuery: 'readonly', $: 'readonly', __: 'readonly' },
+    },
+ESLINT_EOF
+    
+    echo "    files: [" >> eslint.config.js
+    echo -e "$ESLINT_FILES" | sed '$ s/,$//' >> eslint.config.js
+    echo "    ]," >> eslint.config.js
+    
+    cat >> eslint.config.js << 'ESLINT_RULES'
+    rules: {
+      'array-bracket-spacing': ['error', 'always'],
+      'space-in-parens': ['error', 'always'],
+      'object-curly-spacing': ['error', 'always'],
+      'computed-property-spacing': ['error', 'always'],
+      'space-infix-ops': 'error',
+      'keyword-spacing': ['error', { before: true, after: true }],
+      'space-before-function-paren': ['error', { anonymous: 'always', named: 'never', asyncArrow: 'always' }],
+      'space-before-blocks': 'error',
+      'camelcase': ['error', { properties: 'never' }],
+      'indent': ['error', 'tab', { SwitchCase: 1 }],
+      'quotes': ['error', 'single', { avoidEscape: true }],
+      'semi': ['error', 'always'],
+      'comma-dangle': ['error', 'always-multiline'],
+      'no-trailing-spaces': 'error',
+      'eol-last': 'error',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'prefer-const': 'error',
+      'no-var': 'error',
+    },
+  },
+];
+ESLINT_RULES
+    
+    print_success "eslint.config.js generado"
+    echo ""
+    print_success "Archivos de configuración generados"
+fi
+
+# Formateo automático
+if [ "$FORMAT_CODE" = true ]; then
+    echo ""
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  Formateo Automático del Código"
+    echo "══════════════════════════════════════════════════════════════"
+    echo ""
+    
+    [ ! -f "phpcs.xml.dist" ] && {
+        print_error "phpcs.xml.dist no encontrado"
+        print_info "Ejecuta primero el modo 1 o 2 para generar la configuración"
+        exit 1
+    }
+    
+    # Verificar que existan componentes para formatear
+    local has_components=false
+    for plugin in "${SELECTED_PLUGINS[@]}"; do
+        [ -d "$WP_CONTENT_DIR/plugins/$plugin" ] && has_components=true && break
+    done
+    for theme in "${SELECTED_THEMES[@]}"; do
+        [ -d "$WP_CONTENT_DIR/themes/$theme" ] && has_components=true && break
+    done
+    
+    [ "$has_components" = false ] && {
+        print_warning "Advertencia: No se encontraron directorios de componentes"
+        print_info "Verifica que los plugins/temas existan en las rutas esperadas"
+        read -p "¿Continuar de todos modos? (y/n): " resp
+        [[ ! $resp =~ ^[Yy]$ ]] && exit 0
+    }
+    
+    # PHP Code Beautifier & Fixer
+    if [ -f "vendor/bin/phpcbf" ]; then
+        print_info "Formateando código PHP con PHPCBF..."
+        echo ""
+        ./vendor/bin/phpcbf --standard=phpcs.xml.dist || {
+            exitcode=$?
+            [ $exitcode -eq 1 ] && print_success "PHP formateado (algunos archivos corregidos)" || print_warning "PHP: revisar warnings"
+        }
+        echo ""
+    elif [ "$COMPOSER_AVAILABLE" = true ]; then
+        print_warning "PHPCBF no encontrado"
+        read -p "¿Instalar dependencias de Composer? (y/n): " INSTALL
+        [[ $INSTALL =~ ^[Yy]$ ]] && {
+            print_info "Instalando dependencias..."
+            if composer install; then
+                [ -f "vendor/bin/phpcbf" ] && {
+                    print_info "Formateando código PHP..."
+                    ./vendor/bin/phpcbf --standard=phpcs.xml.dist || print_success "PHP formateado"
+                }
+            else
+                print_error "Error al instalar dependencias de Composer"
+            fi
+        }
+    else
+        print_warning "Composer no disponible - omitiendo formateo PHP"
+    fi
+    
+    # ESLint (JavaScript)
+    if [ -f "eslint.config.js" ] && command -v npx >/dev/null 2>&1; then
+        if [ -d "node_modules" ]; then
+            print_info "Formateando código JavaScript con ESLint..."
+            echo ""
+            npx eslint --fix "**/*.{js,jsx,ts,tsx}" --cache || print_warning "ESLint: revisar warnings"
+            echo ""
         else
-            echo "   ${BLUE}npm install && composer install${NC}"
+            print_warning "node_modules no encontrado"
+            read -p "¿Instalar dependencias de npm? (y/n): " INSTALL
+            [[ $INSTALL =~ ^[Yy]$ ]] && {
+                print_info "Instalando dependencias..."
+                if npm install; then
+                    print_info "Formateando código JavaScript..."
+                    npx eslint --fix "**/*.{js,jsx,ts,tsx}" --cache || print_success "JavaScript formateado"
+                else
+                    print_error "Error al instalar dependencias de npm"
+                fi
+            }
         fi
-        echo ""
-    fi
-
-    echo "2. Formatear código según estándares WordPress:"
-    if [ -f "Makefile" ]; then
-        echo "   ${BLUE}make format${NC}"
     else
-        echo "   ${BLUE}npm run format:all${NC}"
+        print_warning "ESLint no disponible - omitiendo formateo JavaScript"
     fi
-    echo ""
     
-    echo "3. Verificar estándares de código:"
-    if [ -f "Makefile" ]; then
-        echo "   ${BLUE}make test${NC}"
-    else
-        echo "   ${BLUE}npm run test:standards${NC}"
-    fi
     echo ""
-    
-    if [ -f "Makefile" ]; then
-        echo "4. Iniciar desarrollo:"
-        echo "   ${BLUE}make dev${NC}"
-        echo ""
-    fi
+    print_success "Formateo completado"
 fi
 
-print_success "¡Listo para comenzar el desarrollo!"
+# Resumen final
 echo ""
+echo "══════════════════════════════════════════════════════════════"
+echo "  🎉 ¡Completado!"
+echo "══════════════════════════════════════════════════════════════"
+echo ""
+
+if [ "$CONFIGURE_PROJECT" = true ]; then
+    print_success "Archivos de configuración generados"
+    echo ""
+    echo "Archivos creados:"
+    [ -f "phpcs.xml.dist" ] && echo "  ✅ phpcs.xml.dist (WordPress PHP Standards)"
+    [ -f "phpstan.neon.dist" ] && echo "  ✅ phpstan.neon.dist (PHP Static Analysis)"
+    [ -f "eslint.config.js" ] && echo "  ✅ eslint.config.js (WordPress JS Standards)"
+    echo ""
+fi
+
+if [ "$FORMAT_CODE" = true ]; then
+    print_success "Código formateado según estándares WordPress"
+    echo ""
+fi
+
+echo "══════════════════════════════════════════════════════════════"
+echo "  Próximos Pasos"
+echo "══════════════════════════════════════════════════════════════"
+echo ""
+
+if [ "$CONFIGURE_PROJECT" = true ] && [ ! -d "vendor" ]; then
+    echo "1. Instalar dependencias:"
+    echo "   ${BLUE}composer install${NC}"
+    echo "   ${BLUE}npm install${NC}"
+    echo ""
+fi
+
+echo "2. Verificar estándares:"
+echo "   ${BLUE}./vendor/bin/phpcs --standard=phpcs.xml.dist${NC}"
+echo "   ${BLUE}npx eslint '**/*.{js,jsx,ts,tsx}'${NC}"
+echo ""
+
+echo "3. Formatear código:"
+echo "   ${BLUE}./vendor/bin/phpcbf --standard=phpcs.xml.dist${NC}"
+echo "   ${BLUE}npx eslint --fix '**/*.{js,jsx,ts,tsx}'${NC}"
+echo ""
+
+print_success "¡Listo para desarrollar con estándares WordPress!"
+echo ""
+

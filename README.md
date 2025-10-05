@@ -1,504 +1,300 @@
 # WordPress Project Template
 
-> **Plantilla profesional de WordPress con estándares de código y herramientas de desarrollo configuradas**
+> **Plantilla profesional de WordPress con detección automática, configuración dinámica y formateo de código según estándares oficiales**
 
 [![WordPress](https://img.shields.io/badge/WordPress-6.5+-blue.svg)](https://wordpress.org/)
 [![PHP](https://img.shields.io/badge/PHP-8.1+-purple.svg)](https://www.php.net/)
 [![Node](https://img.shields.io/badge/Node-18+-green.svg)](https://nodejs.org/)
 
-## 🎯 Características
+## 🎯 Características Principales
 
-- ✅ **WordPress Coding Standards** - PHP, JavaScript y CSS pre-configurados
-- ✅ **Formateo automático** - PHPCS, ESLint, Stylelint, Prettier
-- ✅ **Pre-commit hooks** - Husky + lint-staged
-- ✅ **Análisis estático** - PHPStan Level 5
-- ✅ **CI/CD** - Bitbucket Pipelines configurado
-- ✅ **Makefile** - Comandos simplificados para desarrollo
-- ✅ **4 Modos de uso** - Para proyectos nuevos y existentes
+- 🔍 **Detección automática** - Identifica plugins y temas personalizados automáticamente
+- ⚙️ **Configuración dinámica** - Genera archivos de configuración basados en tu proyecto
+- 🎨 **Formateo automático** - Aplica estándares WordPress a todo el código (PHP, JS, CSS)
+- ✅ **WordPress Coding Standards** - PHPCS, ESLint, Stylelint configurados
+- 📊 **Análisis estático** - PHPStan Level 5
+- 🔄 **3 Modos de operación** - Configurar, formatear o ambos
+- 🎯 **Selectivo** - Elige qué componentes incluir en la configuración
 
-## 📋 Tabla de Contenidos
-
-- [Caso 1: Proyecto Nuevo desde Cero](#caso-1-proyecto-nuevo-desde-cero)
-- [Caso 2: Proyecto Existente (Reemplazar Referencias)](#caso-2-proyecto-existente-reemplazar-referencias)
-- [Caso 3: Solo Actualizar Estándares](#caso-3-solo-actualizar-estándares)
-- [Caso 4: Añadir Estándares a Proyecto Existente](#caso-4-añadir-estándares-a-proyecto-existente)
-- [Comandos Disponibles](#comandos-disponibles)
-- [Configuración Detallada](#configuración-detallada)
-
-## 📦 Estructura
-
-```
-my-project/
-├── wordpress/wp-content/
-│   ├── plugins/my-project-custom-blocks/    # Bloques Gutenberg
-│   └── themes/
-│       ├── flat101-starter-theme/           # Theme base
-│       └── my-project-theme/                # Theme del proyecto
-├── init-project.sh                          # Script de inicialización
-├── verify-template.sh                       # Verificación de plantilla
-├── package.json                             # Scripts npm
-├── composer.json                            # Dependencias PHP
-├── phpcs.xml.dist                           # WordPress PHP Standards
-├── eslint.config.js                         # WordPress JS Standards
-└── Makefile                                 # Comandos de desarrollo
-```
-
----
-
-## 📖 Guías Detalladas por Caso de Uso
-
-### Caso 1: Proyecto Nuevo desde Cero
-
-**Situación**: Vas a empezar un proyecto WordPress completamente nuevo.
-
-**Pasos**:
+## 🚀 Inicio Rápido
 
 ```bash
-# 1. Clonar esta plantilla
-git clone https://github.com/tu-usuario/wp-init.git mi-nuevo-proyecto
-cd mi-nuevo-proyecto
-
-# 2. Ejecutar el script de inicialización
-./init-project.sh
-
-# 3. Seleccionar: 1️⃣ Proyecto nuevo
-
-# 4. El script te preguntará:
-#    - Nombre del proyecto (ej: mi-tienda)
-#    - URL local (ej: https://local.mi-tienda.com)
-#    - Nombre del theme hijo (ej: mi-tienda-theme)
-#    - Nombre del plugin (ej: mi-tienda-custom-blocks)
-
-# 5. Instalar dependencias
-npm install
-composer install
-
-# 6. Configurar Git hooks
-npm run prepare
-
-# 7. Comenzar desarrollo
-make dev
-```
-
-**¿Qué hace el script?**
-- ✅ Reemplaza `my-project` → `mi-tienda` en TODOS los archivos
-- ✅ Actualiza `package.json` con el nombre correcto
-- ✅ Actualiza `composer.json` con el nombre correcto
-- ✅ Configura URLs en `Makefile` y archivos de configuración
-- ✅ Crea archivo `.project-config` con toda la configuración
-- ✅ Hace backup de archivos originales
-
-**Resultado**:
-```
-mi-nuevo-proyecto/
-├── wordpress/wp-content/
-│   ├── plugins/mi-tienda-custom-blocks/
-│   └── themes/
-│       ├── flat101-starter-theme/
-│       └── mi-tienda-theme/
-├── package.json          # Configurado para "mi-tienda"
-├── composer.json         # Configurado para "mi-tienda"
-├── phpcs.xml.dist        # Con prefixes: mi_tienda_
-├── eslint.config.js      # WordPress standards
-└── Makefile              # Con URLs correctas
-```
-
----
-
-### Caso 2: Proyecto Existente (Reemplazar Referencias)
-
-**Situación**: Tienes un proyecto WordPress que copiaste de otro cliente y necesitas cambiar todas las referencias.
-
-**Ejemplo**: Tienes un proyecto de "cliente-a" y quieres adaptarlo para "cliente-b".
-
-**Pasos**:
-
-```bash
-# 1. Ve a tu proyecto existente
-cd /ruta/a/proyecto-cliente-a
-
-# 2. Ejecuta el script de inicialización desde la plantilla
-/ruta/a/wp-init/init-project.sh
-
-# 3. Seleccionar: 2️⃣ Proyecto existente
-
-# 4. El script detectará automáticamente:
-#    - Slug actual: "cliente-a" (desde package.json)
-#    - Te preguntará si es correcto
-#    - Pedirá el nuevo slug: "cliente-b"
-
-# 5. Confirmar que quieres reemplazar las referencias
-
-# 6. Actualizar dependencias si es necesario
-npm install
-composer install
-```
-
-**¿Qué hace el script?**
-- ✅ Detecta el slug actual automáticamente
-- ✅ Reemplaza `cliente-a` → `cliente-b` en todos los archivos
-- ✅ Actualiza prefixes PHP: `cliente_a_` → `cliente_b_`
-- ✅ Actualiza constantes: `CLIENTE_A_` → `CLIENTE_B_`
-- ✅ Actualiza namespaces: `ClienteA\` → `ClienteB\`
-- ✅ Actualiza text domains en archivos de configuración
-- ✅ Hace backup completo antes de cambiar
-
-**Archivos afectados**:
-- `package.json` - Nombre del proyecto y scripts
-- `composer.json` - Nombre del paquete
-- `phpcs.xml.dist` - Prefixes y text domains
-- `phpstan.neon.dist` - Rutas
-- `eslint.config.js` - Rutas
-- `Makefile` - URLs y nombres
-- `README.md` - Referencias al proyecto
-
----
-
-### Caso 3: Solo Actualizar Estándares
-
-**Situación**: Ya tienes tu proyecto configurado con nombres correctos, solo quieres actualizar las reglas de código y estándares a las últimas versiones.
-
-**Pasos**:
-
-```bash
-# 1. Ve a tu proyecto
+# 1. Navega a tu proyecto WordPress
 cd /ruta/a/tu/proyecto
 
 # 2. Ejecuta el script
-/ruta/a/wp-init/init-project.sh
+./init-project.sh
 
-# 3. Seleccionar: 3️⃣ Solo estándares
-
-# 4. El script actualizará SOLO archivos de configuración
-#    SIN modificar package.json ni composer.json
-
-# 5. Revisar cambios y actualizar si es necesario
-git diff
-
-# 6. Actualizar dependencias si cambiaron versiones
-npm install
-composer install
+# 3. Sigue las instrucciones interactivas
 ```
 
-**¿Qué hace el script?**
-- ✅ Actualiza `phpcs.xml.dist` (WordPress Coding Standards)
-- ✅ Actualiza `phpstan.neon.dist` (PHP Static Analysis)
-- ✅ Actualiza `eslint.config.js` (WordPress JS Standards)
-- ✅ Actualiza `commitlint.config.cjs` (Conventional Commits)
-- ✅ NO toca `package.json` existente
-- ✅ NO toca `composer.json` existente
-- ✅ NO cambia nombres ni referencias
+## 🎮 Modos de Operación
 
-**Ideal para**:
-- Actualizar reglas de linting
-- Sincronizar estándares con el equipo
-- Adoptar nuevas versiones de PHPCS/ESLint
+### 1️⃣  Configurar y Formatear Proyecto
 
----
+**Cuándo usar**: Primera vez que configuras estándares en tu proyecto.
 
-### Caso 4: Añadir Estándares a Proyecto Existente
+**Qué hace**:
 
-**Situación**: Tienes un proyecto WordPress ya iniciado con tu propio `package.json` y `composer.json`, pero SIN estándares de código configurados.
+- Detecta automáticamente todos los plugins y temas personalizados
+- Te permite seleccionar cuáles incluir en la configuración
+- Genera archivos de configuración dinámicamente
+- Formatea automáticamente todo el código según estándares WordPress
 
-**Este es el caso MÁS COMÚN** cuando ya trabajas en un proyecto.
+### 2️⃣  Solo Configurar (sin formatear)
 
-**Pasos**:
+**Cuándo usar**: Quieres generar/actualizar los archivos de configuración sin tocar el código.
+
+**Qué hace**:
+
+- Detecta componentes y genera archivos de configuración
+- NO modifica tu código fuente
+
+### 3️⃣  Solo Formatear Código
+
+**Cuándo usar**: Ya tienes configuración y quieres formatear código nuevo/modificado.
+
+**Qué hace**:
+
+- Usa la configuración existente
+- Ejecuta PHPCBF para formatear PHP
+- Ejecuta ESLint para formatear JavaScript
+
+## 🔍 Cómo Funciona
+
+### Detección Automática
+
+El script detecta automáticamente:
+
+**Plugins personalizados**:
+
+- Excluye plugins por defecto de WordPress (Akismet, Hello Dolly, etc.)
+- Identifica plugins con archivos PHP
+
+**Temas personalizados**:
+
+- Excluye temas Twenty* de WordPress
+- Identifica temas con `style.css` o `functions.php`
+
+**MU-Plugins**:
+
+- Detecta todos los directorios en `mu-plugins/`
+
+### Configuración Interactiva
+
+Para cada componente detectado, el script pregunta:
+
+```text
+¿Incluir plugin 'mi-plugin-custom'? (y/n):
+¿Incluir tema 'mi-tema'? (y/n):
+```
+
+### Generación Dinámica
+
+Basándose en tu selección, genera:
+
+**phpcs.xml.dist**:
+
+- Prefixes: `mi_plugin_`, `MI_PLUGIN_`, `MiPlugin\`
+- Text domains: `mi-plugin`, `mi-tema`
+- Rutas a analizar automáticamente configuradas
+
+**phpstan.neon.dist**:
+
+- Paths de análisis para cada componente seleccionado
+- Exclusiones de `build/`, `vendor/`, `node_modules/`
+
+**eslint.config.js**:
+
+- Configuración WordPress JavaScript Standards
+- Rutas específicas a tus componentes
+- Espaciado estilo WordPress (espacios en paréntesis, etc.)
+
+## 💡 Casos de Uso
+
+### Caso 1: Proyecto Nuevo
 
 ```bash
-# 1. Instalar jq (recomendado para merge automático)
-brew install jq  # macOS
-# apt-get install jq  # Linux
+./init-project.sh
+# Selecciona: 1 (Configurar y formatear)
+# Selecciona los componentes a incluir
+# El script configurará todo y formateará el código
+```
 
-# 2. Clonar la plantilla en una ubicación separada
-cd ~/plantillas
-git clone https://github.com/tu-usuario/wp-init.git
+### Caso 2: Proyecto Existente Sin Estándares
 
-# 3. Ve a TU proyecto existente
-cd /ruta/a/tu/proyecto-wordpress
+```bash
+./init-project.sh
+# Selecciona: 1 (Configurar y formatear)
+# El script detectará tus plugins/temas existentes
+# Los configurará y formateará según WordPress Standards
+```
 
-# 4. Ejecuta el script desde la plantilla
-~/plantillas/wp-init/init-project.sh
+### Caso 3: Actualizar Configuración
 
-# 5. Seleccionar: 4️⃣ Añadir estándares
+```bash
+./init-project.sh
+# Selecciona: 2 (Solo configurar)
+# Útil cuando añades nuevos plugins/temas
+```
 
-# 6. El script hará:
-#    ✅ Copiar archivos de configuración que NO existen
-#    ✅ FUSIONAR dependencias en package.json (con backup)
-#    ✅ FUSIONAR dependencias en composer.json (con backup)
-#    ✅ AÑADIR scripts de linting SIN borrar los tuyos
+### Caso 4: Formatear Código Modificado
 
-# 7. Instalar las nuevas dependencias
-npm install
+```bash
+./init-project.sh
+# Selecciona: 3 (Solo formatear)
+# Formatea código según configuración existente
+```
+
+## 📦 Archivos Generados
+
+### phpcs.xml.dist
+
+Configuración de PHP CodeSniffer con:
+
+- WordPress Coding Standards
+- Validación de prefixes globales
+- Validación de text domains i18n
+- Exclusiones configuradas
+
+### phpstan.neon.dist
+
+Configuración de PHPStan con:
+
+- Level 5 de análisis
+- Paths específicos de tus componentes
+- Exclusiones de directorios build/vendor
+
+### eslint.config.js
+
+Configuración de ESLint con:
+
+- WordPress JavaScript Coding Standards
+- Espaciado estilo WordPress
+- Globals de WordPress (wp, jQuery, __, etc.)
+
+## 🛠️ Comandos Disponibles
+
+### Verificar Estándares
+
+```bash
+# PHP
+./vendor/bin/phpcs --standard=phpcs.xml.dist
+
+# JavaScript
+npx eslint '**/*.{js,jsx,ts,tsx}'
+
+# CSS
+npx stylelint '**/*.{css,scss}'
+```
+
+### Formatear Código
+
+```bash
+# PHP (automático)
+./vendor/bin/phpcbf --standard=phpcs.xml.dist
+
+# JavaScript (automático)
+npx eslint --fix '**/*.{js,jsx,ts,tsx}'
+
+# Todo (usando el script)
+./init-project.sh
+# Selecciona: 3 (Solo formatear)
+```
+
+## 📚 Requisitos
+
+### Obligatorios
+
+- Node.js 18+
+- npm
+- Proyecto WordPress con estructura `wordpress/wp-content/` o `wp-content/`
+
+### Opcionales pero Recomendados
+
+- Composer (para estándares PHP)
+- Git (para hooks pre-commit)
+
+## 🔧 Instalación de Dependencias
+
+```bash
+# Dependencias PHP (estándares de código)
 composer install
 
-# 8. Configurar Git hooks
+# Dependencias JavaScript (formateo y linting)
+npm install
+
+# Configurar hooks pre-commit
 npm run prepare
-
-# 9. Probar los nuevos comandos
-npm run lint:js
-npm run lint:php
-npm run format:all
 ```
 
-**¿Qué hace el script?**
+## 📋 Estructura del Proyecto
 
-#### Con `jq` instalado (AUTOMÁTICO):
-
-**Tu `package.json` ANTES**:
-```json
-{
-  "name": "mi-proyecto",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build"
-  },
-  "devDependencies": {
-    "vite": "^5.0.0",
-    "react": "^18.0.0"
-  }
-}
+```text
+my-project/
+├── wordpress/
+│   └── wp-content/
+│       ├── plugins/
+│       │   ├── mi-plugin-custom/
+│       │   └── otro-plugin/
+│       ├── themes/
+│       │   ├── mi-tema/
+│       │   └── otro-tema/
+│       └── mu-plugins/
+│           └── mi-mu-plugin/
+├── init-project.sh              # Script de configuración
+├── phpcs.xml.dist               # WordPress PHP Standards
+├── phpstan.neon.dist            # PHP Static Analysis
+├── eslint.config.js             # WordPress JS Standards
+├── package.json                 # Scripts y dependencias JS
+└── composer.json                # Dependencias PHP
 ```
 
-**Tu `package.json` DESPUÉS**:
-```json
-{
-  "name": "mi-proyecto",
-  "scripts": {
-    "dev": "vite",                        // ✅ Se mantiene
-    "build": "vite build",                // ✅ Se mantiene
-    "lint:js": "eslint '**/*.js'...",     // ✅ Añadido
-    "lint:php": "./vendor/bin/phpcs",     // ✅ Añadido
-    "lint:css": "stylelint '**/*.css'",   // ✅ Añadido
-    "format:all": "npm-run-all...",       // ✅ Añadido
-    "prepare": "husky install"            // ✅ Añadido
-  },
-  "devDependencies": {
-    "vite": "^5.0.0",                     // ✅ Se mantiene
-    "react": "^18.0.0",                   // ✅ Se mantiene
-    "@wordpress/eslint-plugin": "^22.14.0", // ✅ Añadido
-    "eslint": "^9.33.0",                  // ✅ Añadido
-    "prettier": "^3.4.2",                 // ✅ Añadido
-    "stylelint": "^14.16.1",              // ✅ Añadido
-    "husky": "^9.1.7",                    // ✅ Añadido
-    "lint-staged": "^15.3.0"              // ✅ Añadido
-  },
-  "lint-staged": {                        // ✅ Añadido
-    "**/*.{js,jsx,ts,tsx}": ["eslint --fix", "prettier --write"],
-    "**/*.php": ["./vendor/bin/phpcbf", "./vendor/bin/phpcs"]
-  }
-}
-```
+## 🎯 Estándares Aplicados
 
-**Archivos que se copian**:
-```
-tu-proyecto/
-├── phpcs.xml.dist         # ✅ Copiado (WordPress PHP Standards)
-├── phpstan.neon.dist      # ✅ Copiado (PHP Static Analysis)
-├── eslint.config.js       # ✅ Copiado (WordPress JS Standards)
-├── commitlint.config.cjs  # ✅ Copiado (Conventional Commits)
-├── .gitignore             # ✅ Copiado si no existe
-├── package.json           # ✅ Fusionado (backup creado)
-├── composer.json          # ✅ Fusionado (backup creado)
-├── package.json.backup    # ✅ Tu versión original
-└── composer.json.backup   # ✅ Tu versión original
-```
+### PHP (PHPCS)
 
-#### Sin `jq` (MANUAL):
+- WordPress Coding Standards
+- Espaciado: 4 espacios (tabs)
+- Nombres de funciones: `snake_case`
+- Nombres de clases: `PascalCase`
+- Prefixes obligatorios para funciones globales
 
-El script crea archivos de referencia:
-```
-tu-proyecto/
-├── package.json.additions   # 📄 Lo que debes copiar a package.json
-├── composer.json.additions  # 📄 Lo que debes copiar a composer.json
-├── phpcs.xml.dist           # ✅ Copiado
-├── eslint.config.js         # ✅ Copiado
-└── phpstan.neon.dist        # ✅ Copiado
-```
+### JavaScript (ESLint)
 
-**Comandos que tendrás disponibles después**:
-```bash
-# Linting
-npm run lint:js          # Verificar JavaScript
-npm run lint:css         # Verificar CSS/SCSS
-npm run lint:php         # Verificar PHP
+- WordPress JavaScript Coding Standards
+- Espacios dentro de paréntesis: `foo( arg )`
+- Espacios en arrays: `[ 1, 2, 3 ]`
+- Comillas simples obligatorias
+- Tabs para indentación
 
-# Formateo automático
-npm run lint:js:fix      # Arreglar JS automáticamente
-npm run lint:css:fix     # Arreglar CSS automáticamente
-npm run lint:php:fix     # Arreglar PHP automáticamente
-npm run format:all       # Formatear todo
+### CSS (Stylelint)
 
-# Verificación completa
-npm run test:standards   # Verificar todos los estándares
-```
-
-**Ventajas de este modo**:
-- ✅ NO pierdes tu configuración actual
-- ✅ NO pierdes tus scripts personalizados
-- ✅ Merge inteligente de dependencias
-- ✅ Backup automático por seguridad
-- ✅ Solo añade lo necesario para linting
-- ✅ NO incluye scripts de build específicos de la plantilla
-
----
-
-## ⚙️ Configuración
-
-### Archivos de la Plantilla
-
-Para usar cualquiera de los modos necesitas **TODO el repositorio**:
-
-```
-wp-init/                      # 📦 Clona todo esto
-├── init-project.sh           # Script principal
-├── verify-template.sh        # Verificación
-├── package.json              # Template de referencia
-├── composer.json             # Template de referencia
-├── phpcs.xml.dist            # Config WordPress PHP
-├── phpstan.neon.dist         # Config análisis PHP
-├── eslint.config.js          # Config WordPress JS
-├── commitlint.config.cjs     # Config commits
-├── Makefile                  # Comandos de desarrollo
-├── .gitignore.template       # Template gitignore
-└── .project-config.example   # Ejemplo de config
-```
-
-El script **lee** estos archivos y los **copia/fusiona** según el modo que elijas.
-
-## 🛠️ Comandos Principales
-
-### Desarrollo
-```bash
-make dev              # Desarrollo con hot reload
-make dev-blocks       # Solo bloques
-make dev-theme        # Solo theme principal
-```
-
-### Calidad de Código
-```bash
-make format           # Formatear todo el código
-make lint             # Verificar estándares
-make test             # Tests completos
-```
-
-### Build
-```bash
-make build            # Build de producción
-make clean            # Limpiar caches
-```
-
-## 📋 Estándares Configurados
-
-### PHP
-- **PHPCS** con WordPress Coding Standards 3.2+
-- **PHPStan** Level 5
-- Prefixes: `my_project_`, `MY_PROJECT_`, `MyProject\`
-- Text domains configurables
-
-### JavaScript
-- **ESLint 9** con reglas WordPress
-- Espaciado específico: `array = [ a, b ]`, `foo( arg )`
-- Indentación con tabs
-
-### CSS
-- **Stylelint** con `@wordpress/stylelint-config`
-- Soporte SCSS
-
-## 🔧 Configuración Adicional
-
-### Archivos Principales
-
-| Archivo | Propósito |
-|---------|-----------|
-| `phpcs.xml.dist` | Reglas PHP CodeSniffer |
-| `phpstan.neon.dist` | Análisis estático PHP |
-| `eslint.config.js` | Reglas ESLint |
-| `commitlint.config.cjs` | Conventional commits |
-| `Makefile` | Comandos desarrollo |
-
-### Pre-commit Hooks
-
-Configurado con **lint-staged**:
-- Formatea automáticamente archivos modificados
-- Ejecuta linting antes de commit
-- Verifica estándares WordPress
-
-## 📚 Comandos Útiles
-
-```bash
-# Verificar plantilla
-./verify-template.sh
-
-# Formatear código
-npm run format:all
-
-# Verificar estándares
-npm run verify:standards
-
-# Limpiar caches
-npm run cache:clear
-
-# Ver todos los comandos
-make help
-npm run
-```
-
-## 🎨 Personalización
-
-### Cambiar Prefixes PHP
-
-Edita `phpcs.xml.dist`:
-```xml
-<property name="prefixes" type="array">
-    <element value="tu_prefix_"/>
-</property>
-```
-
-### Cambiar Text Domains
-
-Edita `phpcs.xml.dist`:
-```xml
-<property name="text_domain" type="array">
-    <element value="tu-text-domain"/>
-</property>
-```
-
-## 🔍 Verificación
-
-```bash
-# Verificar que la plantilla está lista
-./verify-template.sh
-
-# Verificar estándares de código
-make test
-
-# Ver estado del proyecto
-make status
-```
-
-## 📦 Dependencias
-
-### Requeridas
-- Node.js >= 18.0.0
-- npm >= 8.0.0
-- PHP >= 8.1
-
-### Recomendadas
-- Composer
-- WP-CLI
-- Git
+- WordPress CSS Coding Standards
+- Propiedades ordenadas alfabéticamente
+- Selectores en líneas separadas
 
 ## 🤝 Contribuir
 
-1. Usa commits convencionales: `feat:`, `fix:`, `style:`, etc.
-2. Ejecuta `make format` antes de commit
-3. Verifica con `make test`
+Las contribuciones son bienvenidas. Por favor:
+
+1. Fork el repositorio
+2. Crea una rama para tu feature
+3. Commit con mensajes descriptivos
+4. Push y crea un Pull Request
 
 ## 📄 Licencia
 
-GPL-2.0-or-later - Compatible con WordPress
+Este proyecto está bajo licencia MIT.
+
+## 🆘 Soporte
+
+Si encuentras algún problema:
+
+1. Verifica que tu estructura WordPress sea correcta (`wordpress/wp-content/` o `wp-content/`)
+2. Asegúrate de tener Node.js y npm instalados
+3. Revisa que tus componentes sean detectables (tienen archivos PHP o `style.css`)
 
 ---
 
-**Creado por**: Flat 101 Team  
-**Versión**: 2.0.0
+**Nota**: Este script solo modifica archivos de configuración y formatea código. No modifica la funcionalidad de tu WordPress.

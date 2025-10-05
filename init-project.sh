@@ -112,7 +112,7 @@ echo "  1️⃣  Configurar y formatear proyecto"
 echo "  2️⃣  Solo configurar (sin formatear)"
 echo "  3️⃣  Solo formatear código existente"
 echo ""
-read -p "Selecciona modo (1-3): " MODE
+read -p "Selecciona modo (1-3): " MODE < /dev/tty
 echo ""
 
 FORMAT_CODE=false
@@ -172,7 +172,7 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     [ ${#DETECTED_PLUGINS[@]} -gt 0 ] && {
         echo "--- Plugins ---"
         for plugin in "${DETECTED_PLUGINS[@]}"; do
-            read -p "¿Incluir '$plugin'? (y/n): " resp
+            read -p "¿Incluir '$plugin'? (y/n): " resp < /dev/tty
             [[ $resp =~ ^[Yy]$ ]] && SELECTED_PLUGINS+=("$plugin")
         done
         echo ""
@@ -181,7 +181,7 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     [ ${#DETECTED_THEMES[@]} -gt 0 ] && {
         echo "--- Temas ---"
         for theme in "${DETECTED_THEMES[@]}"; do
-            read -p "¿Incluir '$theme'? (y/n): " resp
+            read -p "¿Incluir '$theme'? (y/n): " resp < /dev/tty
             [[ $resp =~ ^[Yy]$ ]] && SELECTED_THEMES+=("$theme")
         done
         echo ""
@@ -190,7 +190,7 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     [ ${#DETECTED_MU_PLUGINS[@]} -gt 0 ] && {
         echo "--- MU-Plugins ---"
         for mu in "${DETECTED_MU_PLUGINS[@]}"; do
-            read -p "¿Incluir '$mu'? (y/n): " resp
+            read -p "¿Incluir '$mu'? (y/n): " resp < /dev/tty
             [[ $resp =~ ^[Yy]$ ]] && SELECTED_MU_PLUGINS+=("$mu")
         done
         echo ""
@@ -221,7 +221,7 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
         echo ""
     }
     
-    read -p "¿Continuar? (y/n): " CONFIRM
+    read -p "¿Continuar? (y/n): " CONFIRM < /dev/tty
     [[ ! $CONFIRM =~ ^[Yy]$ ]] && { print_warning "Cancelado"; exit 0; }
 else
     # Modo 3: usar todos los componentes detectados
@@ -245,29 +245,51 @@ echo ""
 
 PROJECT_SLUG=""
 
+print_info "Buscando nombre del proyecto en archivos de configuración..."
+
 # Intentar detectar desde composer.json
-[ -f "composer.json" ] && {
-    DETECTED=$(grep -o '"name": "[^"]*"' composer.json | head -1 | cut -d'"' -f4 | cut -d'/' -f2 | sed 's/-wordpress$//')
-    [ -n "$DETECTED" ] && {
+if [ -f "composer.json" ]; then
+    DETECTED=$(grep -o '"name": "[^"]*"' composer.json 2>/dev/null | head -1 | cut -d'"' -f4 | cut -d'/' -f2 | sed 's/-wordpress$//' || echo "")
+    # Ignorar nombres genéricos
+    if [ -n "$DETECTED" ] && [ "$DETECTED" != "wordpress" ] && [ "$DETECTED" != "my-project" ]; then
+        echo ""
         print_info "Detectado desde composer.json: $DETECTED"
-        read -p "¿Usar este nombre? (y/n): " resp
+        read -p "¿Usar este nombre? (y/n): " resp < /dev/tty
+        echo ""
         [[ $resp =~ ^[Yy]$ ]] && PROJECT_SLUG="$DETECTED"
-    }
-}
+    fi
+fi
 
 # Fallback: intentar desde package.json
-[ -z "$PROJECT_SLUG" ] && [ -f "package.json" ] && {
-    DETECTED=$(grep -o '"name": "[^"]*"' package.json | head -1 | cut -d'"' -f4 | sed 's/-wordpress$//')
-    [ -n "$DETECTED" ] && {
+if [ -z "$PROJECT_SLUG" ] && [ -f "package.json" ]; then
+    DETECTED=$(grep -o '"name": "[^"]*"' package.json 2>/dev/null | head -1 | cut -d'"' -f4 | sed 's/-wordpress$//' || echo "")
+    # Ignorar nombres genéricos
+    if [ -n "$DETECTED" ] && [ "$DETECTED" != "wordpress" ] && [ "$DETECTED" != "my-project" ]; then
+        echo ""
         print_info "Detectado desde package.json: $DETECTED"
-        read -p "¿Usar este nombre? (y/n): " resp
+        read -p "¿Usar este nombre? (y/n): " resp < /dev/tty
+        echo ""
         [[ $resp =~ ^[Yy]$ ]] && PROJECT_SLUG="$DETECTED"
-    }
-}
+    fi
+fi
+
+# Solicitar nombre si no se detectó
+if [ -z "$PROJECT_SLUG" ]; then
+    echo ""
+    print_warning "No se pudo detectar el nombre automáticamente"
+fi
 
 while [ -z "$PROJECT_SLUG" ]; do
-    read -p "Nombre del proyecto (slug): " PROJECT_SLUG
-    validate_slug "$PROJECT_SLUG" || PROJECT_SLUG=""
+    echo ""
+    read -p "Nombre del proyecto (slug, ej: astro-headless): " PROJECT_SLUG < /dev/tty
+    echo ""
+    if [ -z "$PROJECT_SLUG" ]; then
+        print_error "El nombre no puede estar vacío"
+        continue
+    fi
+    if ! validate_slug "$PROJECT_SLUG"; then
+        PROJECT_SLUG=""
+    fi
 done
 
 print_success "Proyecto: $PROJECT_SLUG"
@@ -469,6 +491,131 @@ ESLINT_EOF
 ESLINT_RULES
     
     print_success "eslint.config.js generado"
+    
+    # Generar package.json si no existe
+    if [ ! -f "package.json" ]; then
+        print_info "Generando package.json..."
+        cat > package.json << PACKAGE_EOF
+{
+  "name": "${PROJECT_SLUG}",
+  "version": "1.0.0",
+  "description": "WordPress project with coding standards",
+  "type": "module",
+  "scripts": {
+    "lint:js": "eslint '**/*.{js,jsx,ts,tsx}'",
+    "lint:js:fix": "eslint --fix '**/*.{js,jsx,ts,tsx}'",
+    "lint:php": "./vendor/bin/phpcs --standard=phpcs.xml.dist",
+    "lint:php:fix": "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
+    "lint": "npm run lint:js && npm run lint:php",
+    "format": "npm run lint:js:fix && npm run lint:php:fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "eslint": "^9.9.0",
+    "globals": "^15.9.0"
+  },
+  "author": "",
+  "license": "MIT"
+}
+PACKAGE_EOF
+        print_success "package.json generado"
+    fi
+    
+    # Generar composer.json si no existe
+    if [ ! -f "composer.json" ]; then
+        print_info "Generando composer.json..."
+        cat > composer.json << COMPOSER_EOF
+{
+    "name": "${PROJECT_SLUG}/wordpress",
+    "description": "WordPress project with coding standards",
+    "type": "project",
+    "require": {
+        "php": ">=8.1"
+    },
+    "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+        "phpcompatibility/php-compatibility": "^9.3",
+        "phpstan/phpstan": "^1.11",
+        "wp-coding-standards/wpcs": "^3.1"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    },
+    "scripts": {
+        "lint": "phpcs --standard=phpcs.xml.dist",
+        "lint:fix": "phpcbf --standard=phpcs.xml.dist",
+        "analyze": "phpstan analyze"
+    }
+}
+COMPOSER_EOF
+        print_success "composer.json generado"
+    fi
+    
+    # Generar carpeta .vscode si no existe
+    if [ ! -d ".vscode" ]; then
+        print_info "Generando configuración de VSCode..."
+        mkdir -p .vscode
+        
+        # extensions.json
+        cat > .vscode/extensions.json << 'VSCODE_EXT_EOF'
+{
+  "recommendations": [
+    "bmewburn.vscode-intelephense-client",
+    "ValeryanM.vscode-phpsab",
+    "esbenp.prettier-vscode"
+  ]
+}
+VSCODE_EXT_EOF
+        
+        # settings.json
+        cat > .vscode/settings.json << 'VSCODE_SETTINGS_EOF'
+{
+  "editor.rulers": [120],
+  "editor.tabSize": 4,
+  "editor.insertSpaces": false,
+  "editor.detectIndentation": false,
+  "editor.formatOnSave": true,
+  
+  // PHPCS configuration
+  "phpcs.enable": true,
+  "phpcs.standard": "./phpcs.xml.dist",
+  "phpcs.executablePath": "./vendor/bin/phpcs",
+  "phpcs.showSources": true,
+  "phpcs.showSniffSource": true,
+  
+  // PHP language settings
+  "[php]": {
+    "editor.defaultFormatter": "ValeryanM.vscode-phpsab",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": false,
+    "editor.rulers": [120],
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "always"
+    }
+  },
+  
+  // Prettier para otros formatos
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  }
+}
+VSCODE_SETTINGS_EOF
+        
+        print_success ".vscode/ generado"
+    fi
+    
     echo ""
     print_success "Archivos de configuración generados"
 fi
@@ -488,7 +635,7 @@ if [ "$FORMAT_CODE" = true ]; then
     }
     
     # Verificar que existan componentes para formatear
-    local has_components=false
+    has_components=false
     for plugin in "${SELECTED_PLUGINS[@]}"; do
         [ -d "$WP_CONTENT_DIR/plugins/$plugin" ] && has_components=true && break
     done
@@ -499,7 +646,7 @@ if [ "$FORMAT_CODE" = true ]; then
     [ "$has_components" = false ] && {
         print_warning "Advertencia: No se encontraron directorios de componentes"
         print_info "Verifica que los plugins/temas existan en las rutas esperadas"
-        read -p "¿Continuar de todos modos? (y/n): " resp
+        read -p "¿Continuar de todos modos? (y/n): " resp < /dev/tty
         [[ ! $resp =~ ^[Yy]$ ]] && exit 0
     }
     
@@ -512,9 +659,9 @@ if [ "$FORMAT_CODE" = true ]; then
             [ $exitcode -eq 1 ] && print_success "PHP formateado (algunos archivos corregidos)" || print_warning "PHP: revisar warnings"
         }
         echo ""
-    elif [ "$COMPOSER_AVAILABLE" = true ]; then
+    elif [ "$COMPOSER_AVAILABLE" = true ] && [ -f "composer.json" ]; then
         print_warning "PHPCBF no encontrado"
-        read -p "¿Instalar dependencias de Composer? (y/n): " INSTALL
+        read -p "¿Instalar dependencias de Composer? (y/n): " INSTALL < /dev/tty
         [[ $INSTALL =~ ^[Yy]$ ]] && {
             print_info "Instalando dependencias..."
             if composer install; then
@@ -526,29 +673,49 @@ if [ "$FORMAT_CODE" = true ]; then
                 print_error "Error al instalar dependencias de Composer"
             fi
         }
+    elif [ ! -f "composer.json" ]; then
+        print_warning "composer.json no encontrado - omitiendo formateo PHP"
     else
         print_warning "Composer no disponible - omitiendo formateo PHP"
     fi
     
     # ESLint (JavaScript)
     if [ -f "eslint.config.js" ] && command -v npx >/dev/null 2>&1; then
-        if [ -d "node_modules" ]; then
-            print_info "Formateando código JavaScript con ESLint..."
-            echo ""
-            npx eslint --fix "**/*.{js,jsx,ts,tsx}" --cache || print_warning "ESLint: revisar warnings"
-            echo ""
+        # Construir rutas específicas de JS
+        JS_PATHS=()
+        for p in "${SELECTED_PLUGINS[@]}"; do
+            JS_PATHS+=("$WP_CONTENT_DIR/plugins/$p/**/*.{js,jsx,ts,tsx}")
+        done
+        for t in "${SELECTED_THEMES[@]}"; do
+            JS_PATHS+=("$WP_CONTENT_DIR/themes/$t/**/*.{js,jsx,ts,tsx}")
+        done
+        for m in "${SELECTED_MU_PLUGINS[@]}"; do
+            JS_PATHS+=("$WP_CONTENT_DIR/mu-plugins/$m/**/*.{js,jsx,ts,tsx}")
+        done
+        
+        if [ ${#JS_PATHS[@]} -gt 0 ]; then
+            if [ -d "node_modules" ]; then
+                print_info "Formateando código JavaScript con ESLint..."
+                echo ""
+                npx eslint --fix "${JS_PATHS[@]}" --cache 2>/dev/null || print_warning "ESLint: revisar warnings"
+                echo ""
+            elif [ -f "package.json" ]; then
+                print_warning "node_modules no encontrado"
+                read -p "¿Instalar dependencias de npm? (y/n): " INSTALL < /dev/tty
+                [[ $INSTALL =~ ^[Yy]$ ]] && {
+                    print_info "Instalando dependencias..."
+                    if npm install; then
+                        print_info "Formateando código JavaScript..."
+                        npx eslint --fix "${JS_PATHS[@]}" --cache 2>/dev/null || print_success "JavaScript formateado"
+                    else
+                        print_error "Error al instalar dependencias de npm"
+                    fi
+                }
+            else
+                print_warning "package.json no encontrado - omitiendo formateo JavaScript"
+            fi
         else
-            print_warning "node_modules no encontrado"
-            read -p "¿Instalar dependencias de npm? (y/n): " INSTALL
-            [[ $INSTALL =~ ^[Yy]$ ]] && {
-                print_info "Instalando dependencias..."
-                if npm install; then
-                    print_info "Formateando código JavaScript..."
-                    npx eslint --fix "**/*.{js,jsx,ts,tsx}" --cache || print_success "JavaScript formateado"
-                else
-                    print_error "Error al instalar dependencias de npm"
-                fi
-            }
+            print_info "No hay archivos JavaScript para formatear"
         fi
     else
         print_warning "ESLint no disponible - omitiendo formateo JavaScript"
@@ -572,6 +739,9 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     [ -f "phpcs.xml.dist" ] && echo "  ✅ phpcs.xml.dist (WordPress PHP Standards)"
     [ -f "phpstan.neon.dist" ] && echo "  ✅ phpstan.neon.dist (PHP Static Analysis)"
     [ -f "eslint.config.js" ] && echo "  ✅ eslint.config.js (WordPress JS Standards)"
+    [ -f "composer.json" ] && echo "  ✅ composer.json (Dependencias PHP)"
+    [ -f "package.json" ] && echo "  ✅ package.json (Dependencias JS)"
+    [ -d ".vscode" ] && echo "  ✅ .vscode/ (Configuración VSCode)"
     echo ""
 fi
 
@@ -585,21 +755,27 @@ echo "  Próximos Pasos"
 echo "══════════════════════════════════════════════════════════════"
 echo ""
 
-if [ "$CONFIGURE_PROJECT" = true ] && [ ! -d "vendor" ]; then
-    echo "1. Instalar dependencias:"
-    echo "   ${BLUE}composer install${NC}"
-    echo "   ${BLUE}npm install${NC}"
-    echo ""
+if [ "$CONFIGURE_PROJECT" = true ]; then
+    SHOW_INSTALL=false
+    [ ! -d "vendor" ] && [ -f "composer.json" ] && SHOW_INSTALL=true
+    [ ! -d "node_modules" ] && [ -f "package.json" ] && SHOW_INSTALL=true
+    
+    if [ "$SHOW_INSTALL" = true ]; then
+        echo "1. Instalar dependencias:"
+        [ ! -d "vendor" ] && [ -f "composer.json" ] && echo "   ${BLUE}composer install${NC}"
+        [ ! -d "node_modules" ] && [ -f "package.json" ] && echo "   ${BLUE}npm install${NC}"
+        echo ""
+    fi
 fi
 
 echo "2. Verificar estándares:"
-echo "   ${BLUE}./vendor/bin/phpcs --standard=phpcs.xml.dist${NC}"
-echo "   ${BLUE}npx eslint '**/*.{js,jsx,ts,tsx}'${NC}"
+[ -f "composer.json" ] && echo "   ${BLUE}./vendor/bin/phpcs --standard=phpcs.xml.dist${NC}"
+[ -f "package.json" ] && echo "   ${BLUE}npx eslint '**/*.{js,jsx,ts,tsx}'${NC}"
 echo ""
 
 echo "3. Formatear código:"
-echo "   ${BLUE}./vendor/bin/phpcbf --standard=phpcs.xml.dist${NC}"
-echo "   ${BLUE}npx eslint --fix '**/*.{js,jsx,ts,tsx}'${NC}"
+[ -f "composer.json" ] && echo "   ${BLUE}./vendor/bin/phpcbf --standard=phpcs.xml.dist${NC}"
+[ -f "package.json" ] && echo "   ${BLUE}npx eslint --fix '**/*.{js,jsx,ts,tsx}'${NC}"
 echo ""
 
 print_success "¡Listo para desarrollar con estándares WordPress!"

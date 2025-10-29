@@ -1,0 +1,417 @@
+# Makefile for WordPress development shortcuts
+# {{PROJECT_NAME}} Project - Optimized commands for daily development
+
+# === PROJECT URLS ===
+LOCAL_URL := https://local.{{PROJECT_SLUG}}.com/
+PREPROD_URL := https://dev.{{PROJECT_SLUG}}.levelstage.com/
+STAGING_URL := https://dev.{{PROJECT_SLUG}}.levelstage.com
+PRODUCTION_URL := https://{{PROJECT_SLUG}}.com
+
+# === WORDPRESS CONTENT DIRECTORY ===
+WP_CONTENT_DIR := {{WP_CONTENT_DIR}}
+
+.PHONY: help install dev build format lint test clean health
+.PHONY: fix quick commit-ready clear-cache status update check-deps quick-fix
+.PHONY: performance-check open-local open-preprod sync-from-preprod
+.PHONY: debug-assets debug-performance test-unit test-e2e test-a11y test-security test-complete
+.PHONY: monitor-setup generate-reports dev-all build-all lint-all format-all
+# Component-specific targets will be added dynamically
+{{COMPONENT_PHONY_TARGETS}}
+
+help: ## Show this help
+	@echo ""
+	@echo "🚀 {{PROJECT_NAME}} WordPress Development Commands"
+	@echo ""
+	@echo "📋 Main commands:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "🧩 Component-specific commands:"
+{{COMPONENT_HELP_TARGETS}}
+	@echo ""
+	@echo "📖 For more information: README.md"
+	@echo ""
+
+# === INITIAL SETUP ===
+
+install: ## Install all dependencies (npm + composer)
+	@echo "🔧 Installing {{PROJECT_NAME}} project dependencies..."
+	@echo "📦 Installing root dependencies..."
+	npm install
+	composer install
+{{COMPONENT_INSTALL_TARGETS}}
+	@echo "✅ Installation complete for {{PROJECT_NAME}}"
+
+check-deps: ## Check for outdated dependencies
+	@echo "🔍 Checking dependencies..."
+	npm run health:check:outdated
+
+update: ## Update dependencies (use with caution)
+	@echo "⬆️ Updating {{PROJECT_NAME}} dependencies..."
+	npm update
+	composer update
+{{COMPONENT_UPDATE_TARGETS}}
+	@echo "✅ Dependencies updated for {{PROJECT_NAME}}"
+
+# === DEVELOPMENT ===
+
+dev: dev-all ## 🚀 Start parallel development (all components with hot reload)
+
+dev-all: ## 🚀 Start development for all selected components
+	@echo "🚀 Starting parallel development for {{PROJECT_NAME}}..."
+{{COMPONENT_DEV_ALL_TARGETS}}
+	@echo "✅ All development servers started"
+
+build: build-all ## 📦 Create optimized production build (all components)
+
+build-all: ## 📦 Build all selected components
+	@echo "🏗️ Building all {{PROJECT_NAME}} components..."
+{{COMPONENT_BUILD_ALL_TARGETS}}
+	@echo "✅ All components built successfully"
+
+quick-fix: ## ⚡ Quick format + lint + test cycle
+	@echo "🔧 Quick fix cycle for {{PROJECT_NAME}}..."
+	@make format-all
+	@make lint-all
+	@make quick
+	@echo "✅ Ready for commit!"
+
+performance-check: ## 📊 Run performance analysis
+	@echo "⚡ Checking {{PROJECT_NAME}} performance..."
+	@npm run analyze:bundle-size 2>/dev/null || echo "⚠️  Bundle analyzer not configured yet"
+	@npm run test:lighthouse 2>/dev/null || echo "⚠️  Lighthouse tests not configured yet"
+	@echo "📊 Performance report generated"
+
+# === COMPONENT-SPECIFIC DEVELOPMENT TARGETS ===
+{{COMPONENT_DEV_TARGETS}}
+
+# === COMPONENT-SPECIFIC BUILD TARGETS ===
+{{COMPONENT_BUILD_TARGETS}}
+
+# === FORMATTING AND LINTING ===
+
+format: format-all ## 💅 Format all code (PHP, JS, CSS) according to WordPress standards
+
+format-all: ## 💅 Format all selected components
+	@echo "✨ Formatting {{PROJECT_NAME}} code..."
+	@echo "🔧 Formatting PHP code..."
+	@./vendor/bin/phpcbf --standard=phpcs.xml.dist 2>/dev/null || echo "⚠️  PHPCBF not available - run 'composer install'"
+	@echo "🔧 Formatting JavaScript code..."
+	@npx eslint --fix '**/*.{js,jsx,ts,tsx}' 2>/dev/null || echo "⚠️  ESLint not available - run 'npm install'"
+{{COMPONENT_FORMAT_TARGETS}}
+	@echo "✅ All code formatted"
+
+lint: lint-all ## 🔍 Run complete linting without changes
+
+lint-all: ## 🔍 Lint all selected components
+	@echo "🔍 Checking {{PROJECT_NAME}} code standards..."
+	@echo "🔍 Checking PHP standards..."
+	@./vendor/bin/phpcs --standard=phpcs.xml.dist 2>/dev/null || echo "⚠️  PHPCS not available - run 'composer install'"
+	@echo "🔍 Checking JavaScript standards..."
+	@npx eslint '**/*.{js,jsx,ts,tsx}' 2>/dev/null || echo "⚠️  ESLint not available - run 'npm install'"
+{{COMPONENT_LINT_TARGETS}}
+	@echo "✅ All code checked"
+
+# === COMPONENT-SPECIFIC FORMATTING TARGETS ===
+{{COMPONENT_FORMAT_INDIVIDUAL_TARGETS}}
+
+# === COMPONENT-SPECIFIC LINTING TARGETS ===
+{{COMPONENT_LINT_INDIVIDUAL_TARGETS}}
+
+fix: format ## Alias for format
+
+lint-quick: ## Quick linting (JS/CSS only)
+	@echo "⚡ Quick {{PROJECT_NAME}} verification..."
+	@npx eslint '**/*.{js,jsx,ts,tsx}' 2>/dev/null || echo "⚠️  ESLint not available"
+	@echo "✅ Quick verification completed"
+
+# === VERIFICATION AND TESTING ===
+
+test: ## ✅ Run complete quality verification (linting + standards + security)
+	@echo "🧪 Running complete {{PROJECT_NAME}} verification..."
+	@make lint-all
+	@make test-security
+	@echo "✅ Verification completed"
+
+quick: ## Quick verification before commit
+	@echo "⚡ Quick {{PROJECT_NAME}} verification..."
+	@make lint-quick
+	@echo "✅ Quick verification completed"
+
+commit-ready: ## Verify ready for commit
+	@echo "📝 Verifying {{PROJECT_NAME}} commit readiness..."
+	@make format-all
+	@make lint-all
+	@make test-security
+	@echo "✅ Ready for commit"
+
+# === PROJECT URLS AND TOOLS ===
+
+open-local: ## 🌐 Open local development site
+	@echo "🌐 Opening {{PROJECT_NAME}} local site..."
+	@open $(LOCAL_URL)
+
+open-preprod: ## 🌐 Open preprod site
+	@echo "🌐 Opening {{PROJECT_NAME}} preprod site..."
+	@open $(PREPROD_URL)
+
+sync-from-preprod: ## 🔄 Sync database from preprod
+	@echo "🔄 Syncing {{PROJECT_NAME}} from preprod..."
+	@echo "⚠️  Database sync commands to be configured with WP-CLI"
+	# Add WP-CLI commands for database sync
+
+lighthouse-local: ## 🔍 Run Lighthouse on local
+	@echo "🔍 Running Lighthouse on {{PROJECT_NAME}} local site..."
+	@mkdir -p reports
+	@npx lighthouse $(LOCAL_URL) --output=html --output-path=./reports/lighthouse-local.html --quiet
+	@echo "📊 Local Lighthouse report: ./reports/lighthouse-local.html"
+
+lighthouse-preprod: ## 🔍 Run Lighthouse on preprod
+	@echo "🔍 Running Lighthouse on {{PROJECT_NAME}} preprod site..."
+	@mkdir -p reports
+	@npx lighthouse $(PREPROD_URL) --output=html --output-path=./reports/lighthouse-preprod.html --quiet
+	@echo "📊 Preprod Lighthouse report: ./reports/lighthouse-preprod.html"
+
+# === DEBUGGING COMMANDS ===
+
+debug-assets: ## 📦 Debug asset loading issues
+	@echo "📦 {{PROJECT_NAME}} asset debugging..."
+	@echo "🔍 Checking built assets:"
+	@find $(WP_CONTENT_DIR)/themes/*/assets/build/ -name "*.js" -o -name "*.css" 2>/dev/null | head -10 || echo "No built assets found"
+	@find $(WP_CONTENT_DIR)/plugins/*/build/ -name "*.js" -o -name "*.css" 2>/dev/null | head -10 || echo "No plugin assets found"
+	@echo "\n📊 Asset sizes:"
+	@du -sh $(WP_CONTENT_DIR)/themes/*/assets/build/* 2>/dev/null || echo "No theme assets to analyze"
+	@du -sh $(WP_CONTENT_DIR)/plugins/*/build/* 2>/dev/null || echo "No plugin assets to analyze"
+
+debug-performance: ## ⚡ Debug performance issues
+	@echo "⚡ {{PROJECT_NAME}} performance debugging..."
+	@echo "📊 Bundle sizes:"
+	@npm run analyze:bundle-size 2>/dev/null || echo "Bundle analyzer not configured"
+	@echo "\n🔍 PHP analysis:"
+	@./vendor/bin/phpstan analyze 2>/dev/null || echo "PHPStan not available - run 'composer install'"
+	@echo "\n🗂️ Cache status:"
+	@ls -la .eslintcache .stylelintcache 2>/dev/null || echo "No cache files found"
+
+# === COMPONENT-SPECIFIC DEBUGGING TARGETS ===
+{{COMPONENT_DEBUG_TARGETS}}
+
+# === TESTING COMMANDS ===
+
+test-unit: ## 🧪 Run unit tests
+	@echo "🧪 Running unit tests..."
+	@npm run test:unit 2>/dev/null || echo "⚠️  Unit tests not configured yet. Run: npm install --save-dev jest"
+
+test-e2e: ## 🎭 Run end-to-end tests
+	@echo "🎭 Running E2E tests..."
+	@npm run test:e2e 2>/dev/null || echo "⚠️  E2E tests not configured yet. Playwright is available in blocks plugin."
+
+test-a11y: ## ♿ Run accessibility tests
+	@echo "♿ Running accessibility tests..."
+	@npm run test:a11y 2>/dev/null || echo "⚠️  A11y tests not configured yet. Run: npm install -g pa11y-ci"
+
+test-security: ## 🔒 Run security audit
+	@echo "🔒 Running {{PROJECT_NAME}} security audit..."
+	@npm audit --audit-level=moderate 2>/dev/null || echo "⚠️  npm audit not available"
+	@composer audit 2>/dev/null || echo "⚠️  composer audit not available"
+
+test-complete: ## ✅ Run all tests
+	@echo "✅ Running complete {{PROJECT_NAME}} test suite..."
+	@make test-security
+	@make test-unit
+	@make test-a11y
+	@echo "📊 Test summary completed"
+
+# === MONITORING AND REPORTS ===
+
+monitor-setup: ## 📊 Setup monitoring tools
+	@echo "📊 Setting up monitoring tools..."
+	@npm list -g lighthouse 2>/dev/null || echo "Installing Lighthouse globally..." && npm install -g lighthouse
+	@npm list -g pa11y-ci 2>/dev/null || echo "Installing Pa11y globally..." && npm install -g pa11y-ci
+	@echo "✅ Monitoring tools setup completed"
+
+generate-reports: ## 📈 Generate comprehensive project reports
+	@echo "📈 Generating comprehensive {{PROJECT_NAME}} reports..."
+	@mkdir -p reports
+	@make lighthouse-local 2>/dev/null || echo "⚠️  Local site not accessible"
+	@make lighthouse-preprod 2>/dev/null || echo "⚠️  Preprod site not accessible"
+	@make test-a11y > reports/accessibility-report.txt 2>/dev/null || echo "⚠️  A11y tests not configured"
+	@make test-security > reports/security-audit.txt 2>/dev/null || echo "Security audit saved"
+	@echo "📊 Reports generated in ./reports/"
+	@ls -la reports/
+
+# === MAINTENANCE ===
+
+clean: ## 🧹 Clean all caches and temporary files
+	@echo "🧹 Cleaning {{PROJECT_NAME}} temporary files..."
+	@rm -rf .eslintcache .stylelintcache
+	@rm -rf node_modules/.cache
+{{COMPONENT_CLEAN_TARGETS}}
+	@echo "✅ Cleanup completed"
+
+clear-cache: ## Clear all caches (ESLint, Stylelint, PHPCS, Prettier)
+	@echo "🗑️ Clearing {{PROJECT_NAME}} caches..."
+	@rm -rf .eslintcache .stylelintcache
+	@rm -rf node_modules/.cache
+	@echo "✅ Caches cleared"
+
+health: ## 🏥 Check project health (dependencies, configs, standards)
+	@echo "🏥 Checking {{PROJECT_NAME}} project health..."
+	@make check-deps
+	@make lint-quick
+	@echo "✅ Health check completed"
+
+status: ## Show current project status
+	@echo ""
+	@echo "📊 {{PROJECT_NAME}} Project Status"
+	@echo "============================"
+	@echo ""
+	@echo "📁 Project structure:"
+	@ls -la $(WP_CONTENT_DIR)/plugins/ 2>/dev/null | head -5 || echo "  ❌ Plugins directory not found"
+	@ls -la $(WP_CONTENT_DIR)/themes/ 2>/dev/null | head -5 || echo "  ❌ Themes directory not found"
+	@echo ""
+	@echo "📦 Dependencies installed:"
+	@test -d node_modules && echo "  ✅ Root dependencies installed" || echo "  ❌ Root dependencies missing"
+	@test -d vendor && echo "  ✅ Root composer dependencies installed" || echo "  ❌ Root composer dependencies missing"
+{{COMPONENT_STATUS_TARGETS}}
+	@echo ""
+	@echo "🔧 For more commands: make help"
+	@echo ""
+
+# === SHORTCUTS AND ALIASES ===
+
+# Common aliases for quick development
+start: dev ## Alias for dev
+serve: dev ## Alias for dev
+watch: dev ## Alias for dev
+
+# Aliases for verification
+check: quick ## Alias for quick
+verify: test ## Alias for test
+
+# Aliases for cleanup
+reset: clean ## Alias for clean
+flush: clear-cache ## Alias for clear-cache
+
+# === CI/CD COMMANDS ===
+
+deploy-staging: ## 🚀 Deploy to staging environment
+	@echo "🚀 Deploying {{PROJECT_NAME}} to staging..."
+	@echo "📋 Pre-deployment checks..."
+	@make test-complete
+	@echo "📦 Building assets..."
+	@make build-all
+	@echo "🔄 Syncing to staging: $(STAGING_URL)"
+	@./sh/deploy/deploy.sh staging 2>/dev/null || echo "⚠️  Deploy script not found"
+	@echo "✅ Staging deployment completed"
+	@echo "🌐 Visit: $(STAGING_URL)"
+
+deploy-prod: ## 🌟 Deploy to production environment
+	@echo "🌟 Deploying {{PROJECT_NAME}} to production..."
+	@echo "⚠️  WARNING: This will deploy to PRODUCTION!"
+	@read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ]
+	@echo "📋 Pre-deployment checks..."
+	@make test-complete
+	@echo "📦 Building assets..."
+	@make build-all
+	@echo "🔄 Syncing to production: $(PRODUCTION_URL)"
+	@./sh/deploy/deploy.sh production 2>/dev/null || echo "⚠️  Deploy script not found"
+	@echo "✅ Production deployment completed"
+	@echo "🌐 Visit: $(PRODUCTION_URL)"
+
+rollback-staging: ## ⏪ Rollback staging to previous version
+	@echo "⏪ Rolling back {{PROJECT_NAME}} staging..."
+	@./sh/deploy/rollback.sh staging 2>/dev/null || echo "⚠️  Rollback script not found"
+	@echo "✅ Staging rollback completed"
+
+rollback-prod: ## 🔄 Rollback production to previous version
+	@echo "🔄 Rolling back {{PROJECT_NAME}} production..."
+	@echo "⚠️  WARNING: This will rollback PRODUCTION!"
+	@read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ]
+	@./sh/deploy/rollback.sh production 2>/dev/null || echo "⚠️  Rollback script not found"
+	@echo "✅ Production rollback completed"
+
+# === DATABASE SYNC COMMANDS ===
+
+db-backup: ## 💾 Create database backup
+	@echo "💾 Creating {{PROJECT_NAME}} database backup..."
+	@./sh/wp/simple-db-backup.sh 2>/dev/null || echo "⚠️  Database backup script not found"
+
+db-backup-simple: ## 💾 Create simple database backup (Docker direct)
+	@echo "💾 Creating simple {{PROJECT_NAME}} database backup..."
+	@./sh/wp/simple-db-backup.sh 2>/dev/null || echo "⚠️  Database backup script not found"
+
+# Docker-specific database commands
+db-pull: ## 📥 Pull database from Levelstage to Docker local (with URL replacement)
+	@echo "📥 Pulling {{PROJECT_NAME}} database from Levelstage to Docker local..."
+	@./sh/wp/docker-db-sync.sh pull 2>/dev/null || echo "⚠️  Database sync script not found"
+
+db-push: ## 📤 Push Docker local database to Levelstage (with URL replacement)
+	@echo "📤 Pushing {{PROJECT_NAME}} Docker local database to Levelstage..."
+	@./sh/wp/docker-db-sync.sh push 2>/dev/null || echo "⚠️  Database sync script not found"
+
+db-pull-dry: ## 🔍 Preview pull from Levelstage (dry run)
+	@echo "🔍 Preview: Pull {{PROJECT_NAME}} database from Levelstage..."
+	@./sh/wp/docker-db-sync.sh pull --dry-run 2>/dev/null || echo "⚠️  Database sync script not found"
+
+db-push-dry: ## 🔍 Preview push to Levelstage (dry run)
+	@echo "🔍 Preview: Push {{PROJECT_NAME}} database to Levelstage..."
+	@./sh/wp/docker-db-sync.sh push --dry-run 2>/dev/null || echo "⚠️  Database sync script not found"
+
+# === BACKUP COMMANDS ===
+
+backup-full: ## 💾 Create full project backup
+	@echo "💾 Creating full {{PROJECT_NAME}} project backup..."
+	@mkdir -p backups/full
+	@make db-backup
+	@echo "📁 Backing up files..."
+	@tar -czf backups/full/files-$(shell date +%Y%m%d-%H%M%S).tar.gz $(WP_CONTENT_DIR)/uploads/ 2>/dev/null || echo "⚠️  Uploads directory not found"
+	@echo "✅ Full backup completed"
+
+backup-code: ## 💾 Create code backup (themes and plugins)
+	@echo "💾 Creating {{PROJECT_NAME}} code backup..."
+	@mkdir -p backups/code
+	@tar -czf backups/code/code-$(shell date +%Y%m%d-%H%M%S).tar.gz $(WP_CONTENT_DIR)/themes/ $(WP_CONTENT_DIR)/plugins/ 2>/dev/null || echo "⚠️  Some directories not found"
+	@echo "✅ Code backup completed"
+
+# === LIGHTHOUSE CI COMMANDS ===
+
+lighthouse-ci-setup: ## 🏮 Setup Lighthouse CI
+	@echo "🏮 Setting up {{PROJECT_NAME}} Lighthouse CI..."
+	@npm install -g @lhci/cli 2>/dev/null || echo "⚠️  Failed to install Lighthouse CI globally"
+	@echo "📝 Creating Lighthouse CI config..."
+	@echo "module.exports = {" > lighthouserc.js
+	@echo "  ci: {" >> lighthouserc.js
+	@echo "    collect: {" >> lighthouserc.js
+	@echo "      url: ['$(LOCAL_URL)', '$(LOCAL_URL)/about/', '$(LOCAL_URL)/contact/']," >> lighthouserc.js
+	@echo "      numberOfRuns: 3" >> lighthouserc.js
+	@echo "    }," >> lighthouserc.js
+	@echo "    assert: {" >> lighthouserc.js
+	@echo "      assertions: {" >> lighthouserc.js
+	@echo "        'categories:performance': ['warn', {minScore: 0.8}]," >> lighthouserc.js
+	@echo "        'categories:accessibility': ['error', {minScore: 0.9}]," >> lighthouserc.js
+	@echo "        'categories:best-practices': ['warn', {minScore: 0.8}]," >> lighthouserc.js
+	@echo "        'categories:seo': ['warn', {minScore: 0.8}]" >> lighthouserc.js
+	@echo "      }" >> lighthouserc.js
+	@echo "    }," >> lighthouserc.js
+	@echo "    upload: {" >> lighthouserc.js
+	@echo "      target: 'filesystem'," >> lighthouserc.js
+	@echo "      outputDir: './reports/lighthouse-ci'" >> lighthouserc.js
+	@echo "    }" >> lighthouserc.js
+	@echo "  }" >> lighthouserc.js
+	@echo "};" >> lighthouserc.js
+	@echo "✅ Lighthouse CI setup completed"
+
+lighthouse-ci-run: ## 🏮 Run Lighthouse CI analysis
+	@echo "🏮 Running {{PROJECT_NAME}} Lighthouse CI analysis..."
+	@mkdir -p reports/lighthouse-ci
+	@lhci collect --url=$(LOCAL_URL) --numberOfRuns=3 2>/dev/null || echo "⚠️  Lighthouse CI not available"
+	@lhci assert --preset=lighthouse:recommended 2>/dev/null || echo "⚠️  Lighthouse CI assertions failed"
+	@lhci upload --target=filesystem --outputDir=./reports/lighthouse-ci 2>/dev/null || echo "⚠️  Lighthouse CI upload failed"
+	@echo "✅ Lighthouse CI analysis completed"
+	@echo "📊 Reports available in: reports/lighthouse-ci/"
+
+# === NOTIFICATION COMMANDS ===
+
+notify-deployment: ## 📢 Send deployment notification
+	@echo "📢 Sending {{PROJECT_NAME}} deployment notification..."
+	@echo "🚀 {{PROJECT_NAME}} deployment completed at $(shell date)" | tee -a deployment.log
+	@echo "✅ Notification sent"

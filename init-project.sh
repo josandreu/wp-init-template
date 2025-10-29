@@ -29,9 +29,606 @@ generate_constant() {
     echo "$1" | tr '[:lower:]' '[:upper:]' | tr '-' '_'
 }
 
+# ====================================================================
+# External WordPress Path Handling Module
+# ====================================================================
+
+# Global variables for external WordPress path handling
+WORDPRESS_PATH=""
+PROJECT_ROOT=""
+WORDPRESS_RELATIVE_PATH=""
+NON_INTERACTIVE=false
+
+# Function to validate WordPress structure at specified path
+validate_wordpress_structure() {
+    local wp_path="$1"
+    local show_details="${2:-false}"
+    
+    # Use the enhanced validation function
+    validate_wordpress_structure_enhanced "$wp_path" "$show_details"
+}
+
+# Function to handle WordPress path and calculate project root
+handle_wordpress_path() {
+    local wordpress_path="$1"
+    local project_root
+    
+    print_info "Procesando ruta de WordPress: $wordpress_path"
+    
+    # Convert relative path to absolute path
+    if [[ "$wordpress_path" != /* ]]; then
+        local original_path="$wordpress_path"
+        wordpress_path="$(cd "$(dirname "$wordpress_path")" && pwd)/$(basename "$wordpress_path")"
+        print_info "Ruta relativa convertida: $original_path → $wordpress_path"
+    fi
+    
+    # Validate WordPress structure with enhanced validation
+    if ! validate_wordpress_structure_enhanced "$wordpress_path"; then
+        return 1
+    fi
+    
+    # Calculate project root as parent directory of WordPress path
+    project_root=$(dirname "$wordpress_path")
+    
+    # Verify project root is writable
+    if [ ! -w "$project_root" ]; then
+        print_error "El directorio raíz del proyecto no tiene permisos de escritura: $project_root"
+        echo ""
+        echo "💡 Soluciones:"
+        echo "  • Cambiar permisos: chmod 755 '$project_root'"
+        echo "  • Ejecutar con sudo (no recomendado)"
+        echo "  • Verificar que eres el propietario del directorio"
+        echo ""
+        return 1
+    fi
+    
+    # Set global variables
+    WORDPRESS_PATH="$wordpress_path"
+    PROJECT_ROOT="$project_root"
+    WORDPRESS_RELATIVE_PATH=$(basename "$wordpress_path")
+    
+    # Set WP_CONTENT_DIR to relative path from project root
+    WP_CONTENT_DIR="$WORDPRESS_RELATIVE_PATH/wp-content"
+    
+    # Show structure summary
+    show_structure_summary "$wordpress_path" "$project_root" "$WORDPRESS_RELATIVE_PATH"
+    
+    # Confirm configuration with user
+    if ! confirm_project_configuration "$wordpress_path" "$project_root" "$WORDPRESS_RELATIVE_PATH"; then
+        return 1
+    fi
+    
+    print_success "Configuración de WordPress completada exitosamente"
+    [ -n "$LOG_FILE" ] && log_success "WordPress path configured: $wordpress_path -> $project_root" "PATH_HANDLING"
+    
+    return 0
+}
+
+# Function to parse CLI arguments
+parse_cli_arguments() {
+    local wordpress_path=""
+    local mode=""
+    
+    # Parse all arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help|-h)
+                show_cli_help
+                exit 0
+                ;;
+            --version|-v)
+                show_version
+                exit 0
+                ;;
+            --*)
+                print_error "Opción desconocida: $1"
+                echo ""
+                echo "Usa --help para ver las opciones disponibles"
+                exit 1
+                ;;
+            *)
+                if [ -z "$wordpress_path" ]; then
+                    wordpress_path="$1"
+                elif [ -z "$mode" ]; then
+                    mode="$1"
+                else
+                    print_error "Demasiados argumentos: $1"
+                    echo ""
+                    echo "Uso: $0 [WORDPRESS_PATH] [MODE]"
+                    echo "Usa --help para más información"
+                    exit 1
+                fi
+                ;;
+        esac
+        shift
+    done
+    
+    if [ -n "$wordpress_path" ]; then
+        # Handle WordPress path
+        if ! handle_wordpress_path "$wordpress_path"; then
+            print_error "Error al configurar la ruta de WordPress: $wordpress_path"
+            echo ""
+            echo "💡 Usa --help para ver ejemplos de uso"
+            exit 1
+        fi
+        
+        # Set mode if provided
+        if [ -n "$mode" ]; then
+            if [[ "$mode" =~ ^[1-4]$ ]]; then
+                MODE="$mode"
+            else
+                print_error "Modo inválido: $mode. Debe ser 1, 2, 3, o 4"
+                echo ""
+                echo "Modos disponibles:"
+                echo "  1 - Configurar y formatear proyecto"
+                echo "  2 - Solo configurar (sin formatear)"
+                echo "  3 - Solo formatear código existente"
+                echo "  4 - Fusionar configuración (requiere jq)"
+                echo ""
+                exit 1
+            fi
+        fi
+        
+        # Mark as non-interactive
+        NON_INTERACTIVE=true
+        return 0
+    fi
+    
+    return 0
+}
+
+# Function to detect execution context (legacy vs new mode)
+detect_execution_context() {
+    # Check if we're executing from a WordPress project root (legacy mode)
+    if [ -d "./wp-content" ] || [ -d "./wordpress/wp-content" ]; then
+        print_info "Legacy mode detected (executing from WordPress project root)"
+        return 0
+    else
+        print_info "New mode detected (external execution)"
+        return 1
+    fi
+}
+
+# Function to show detected structure summary
+show_structure_summary() {
+    local wordpress_path="$1"
+    local project_root="$2"
+    local relative_path="$3"
+    
+    echo ""
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  📋 Resumen de Estructura Detectada"
+    echo "══════════════════════════════════════════════════════════════"
+    echo ""
+    
+    print_success "Estructura WordPress válida detectada"
+    echo ""
+    
+    echo "📁 Rutas del proyecto:"
+    echo "  • Raíz del proyecto: ${BLUE}$project_root${NC}"
+    echo "  • Directorio WordPress: ${BLUE}$wordpress_path${NC}"
+    echo "  • Ruta relativa: ${BLUE}$relative_path${NC}"
+    echo ""
+    
+    echo "📂 Estructura WordPress encontrada:"
+    echo "  • wp-content: ${GREEN}✓${NC} $wordpress_path/wp-content"
+    
+    if [ -d "$wordpress_path/wp-content/plugins" ]; then
+        local plugin_count=$(find "$wordpress_path/wp-content/plugins" -maxdepth 1 -type d | wc -l)
+        plugin_count=$((plugin_count - 1)) # Subtract the plugins directory itself
+        echo "  • plugins: ${GREEN}✓${NC} ($plugin_count directorios)"
+    else
+        echo "  • plugins: ${RED}✗${NC} (no encontrado)"
+    fi
+    
+    if [ -d "$wordpress_path/wp-content/themes" ]; then
+        local theme_count=$(find "$wordpress_path/wp-content/themes" -maxdepth 1 -type d | wc -l)
+        theme_count=$((theme_count - 1)) # Subtract the themes directory itself
+        echo "  • themes: ${GREEN}✓${NC} ($theme_count directorios)"
+    else
+        echo "  • themes: ${RED}✗${NC} (no encontrado)"
+    fi
+    
+    if [ -d "$wordpress_path/wp-content/mu-plugins" ]; then
+        local mu_count=$(find "$wordpress_path/wp-content/mu-plugins" -maxdepth 1 -type d | wc -l)
+        mu_count=$((mu_count - 1)) # Subtract the mu-plugins directory itself
+        echo "  • mu-plugins: ${GREEN}✓${NC} ($mu_count directorios)"
+    else
+        echo "  • mu-plugins: ${YELLOW}⚠${NC} (será creado automáticamente)"
+    fi
+    
+    echo ""
+    
+    # Check for existing project files
+    echo "📄 Archivos del proyecto existentes:"
+    local existing_files=()
+    [ -f "$project_root/composer.json" ] && existing_files+=("composer.json")
+    [ -f "$project_root/package.json" ] && existing_files+=("package.json")
+    [ -f "$project_root/Jenkinsfile" ] && existing_files+=("Jenkinsfile")
+    [ -d "$project_root/docker" ] && existing_files+=("docker/")
+    [ -f "$project_root/docker-compose.yml" ] && existing_files+=("docker-compose.yml")
+    [ -f "$project_root/.gitignore" ] && existing_files+=(".gitignore")
+    [ -f "$project_root/README.md" ] && existing_files+=("README.md")
+    
+    if [ ${#existing_files[@]} -gt 0 ]; then
+        for file in "${existing_files[@]}"; do
+            echo "  • ${GREEN}✓${NC} $file (será preservado)"
+        done
+    else
+        echo "  • ${YELLOW}ℹ${NC} No se encontraron archivos de proyecto existentes"
+    fi
+    
+    echo ""
+    
+    # Check write permissions
+    echo "🔐 Permisos de escritura:"
+    if [ -w "$project_root" ]; then
+        echo "  • Raíz del proyecto: ${GREEN}✓${NC} Escribible"
+    else
+        echo "  • Raíz del proyecto: ${RED}✗${NC} Sin permisos de escritura"
+        print_error "Sin permisos de escritura en: $project_root"
+        return 1
+    fi
+    
+    if [ -w "$wordpress_path" ]; then
+        echo "  • Directorio WordPress: ${GREEN}✓${NC} Escribible"
+    else
+        echo "  • Directorio WordPress: ${YELLOW}⚠${NC} Solo lectura (puede limitar algunas operaciones)"
+    fi
+    
+    echo ""
+    
+    # Show what will be created/modified
+    echo "📝 Archivos que se crearán/modificarán:"
+    echo "  • phpcs.xml.dist (configuración PHP CodeSniffer)"
+    echo "  • phpstan.neon.dist (análisis estático PHP)"
+    echo "  • eslint.config.js (configuración ESLint)"
+    echo "  • package.json (dependencias JavaScript)"
+    echo "  • composer.json (dependencias PHP)"
+    echo "  • wp.code-workspace (workspace VSCode)"
+    echo "  • .vscode/settings.json (configuración VSCode)"
+    
+    echo ""
+    
+    return 0
+}
+
+# Function to confirm project configuration
+confirm_project_configuration() {
+    local wordpress_path="$1"
+    local project_root="$2"
+    local relative_path="$3"
+    
+    if [ "$NON_INTERACTIVE" = true ]; then
+        print_info "Modo no interactivo: continuando automáticamente"
+        return 0
+    fi
+    
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  ✅ Confirmación de Configuración"
+    echo "══════════════════════════════════════════════════════════════"
+    echo ""
+    
+    echo "¿La configuración detectada es correcta?"
+    echo ""
+    echo "  Raíz del proyecto: $project_root"
+    echo "  WordPress: $wordpress_path"
+    echo "  Ruta relativa: $relative_path"
+    echo ""
+    
+    while true; do
+        echo -n "¿Continuar con esta configuración? (y/n): "
+        read response
+        echo ""
+        
+        case "$response" in
+            [Yy]|[Yy][Ee][Ss]|[Ss]|[Ss][Ii])
+                print_success "Configuración confirmada"
+                return 0
+                ;;
+            [Nn]|[Nn][Oo])
+                print_warning "Configuración rechazada por el usuario"
+                echo ""
+                echo "Puedes:"
+                echo "  1. Especificar una ruta diferente de WordPress"
+                echo "  2. Verificar que estás en el directorio correcto"
+                echo "  3. Consultar la ayuda: $0 --help"
+                echo ""
+                return 1
+                ;;
+            *)
+                print_warning "Por favor responde 'y' para sí o 'n' para no"
+                ;;
+        esac
+    done
+}
+
+# Enhanced function to handle WordPress path validation with better error messages
+validate_wordpress_structure_enhanced() {
+    local wp_path="$1"
+    local show_details="${2:-true}"
+    
+    if [ "$show_details" = true ]; then
+        print_info "Validando estructura WordPress en: $wp_path"
+    fi
+    
+    # Verify that the directory exists
+    if [ ! -d "$wp_path" ]; then
+        print_error "El directorio no existe: $wp_path"
+        echo ""
+        echo "💡 Soluciones:"
+        echo "  • Verifica que la ruta sea correcta"
+        echo "  • Usa rutas absolutas: /Users/usuario/Sites/mi-proyecto/wordpress"
+        echo "  • O rutas relativas: ./mi-wordpress"
+        echo ""
+        [ -n "$LOG_FILE" ] && log_error "WordPress path validation failed - directory not found: $wp_path" "VALIDATION"
+        return 1
+    fi
+    
+    # Verify wp-content and subdirectories
+    if [ ! -d "$wp_path/wp-content" ]; then
+        print_error "Directorio wp-content no encontrado en: $wp_path"
+        echo ""
+        echo "💡 Soluciones:"
+        echo "  • Verifica que sea un directorio WordPress válido"
+        echo "  • El directorio debe contener wp-content/"
+        echo "  • Estructura esperada: $wp_path/wp-content/"
+        echo ""
+        echo "🔍 Contenido actual del directorio:"
+        ls -la "$wp_path" 2>/dev/null | head -10
+        echo ""
+        [ -n "$LOG_FILE" ] && log_error "WordPress structure validation failed - wp-content not found" "VALIDATION"
+        return 1
+    fi
+    
+    if [ ! -d "$wp_path/wp-content/plugins" ]; then
+        print_error "Directorio plugins no encontrado en: $wp_path/wp-content"
+        echo ""
+        echo "💡 Soluciones:"
+        echo "  • Crear directorio: mkdir -p '$wp_path/wp-content/plugins'"
+        echo "  • Verificar permisos del directorio wp-content"
+        echo ""
+        [ -n "$LOG_FILE" ] && log_error "WordPress structure validation failed - plugins directory not found" "VALIDATION"
+        return 1
+    fi
+    
+    if [ ! -d "$wp_path/wp-content/themes" ]; then
+        print_error "Directorio themes no encontrado en: $wp_path/wp-content"
+        echo ""
+        echo "💡 Soluciones:"
+        echo "  • Crear directorio: mkdir -p '$wp_path/wp-content/themes'"
+        echo "  • Verificar permisos del directorio wp-content"
+        echo ""
+        [ -n "$LOG_FILE" ] && log_error "WordPress structure validation failed - themes directory not found" "VALIDATION"
+        return 1
+    fi
+    
+    # Create mu-plugins directory if it doesn't exist
+    if [ ! -d "$wp_path/wp-content/mu-plugins" ]; then
+        if [ "$show_details" = true ]; then
+            print_info "Creando directorio mu-plugins: $wp_path/wp-content/mu-plugins"
+        fi
+        if mkdir -p "$wp_path/wp-content/mu-plugins"; then
+            [ -n "$LOG_FILE" ] && log_info "Created mu-plugins directory" "VALIDATION"
+        else
+            print_error "Error al crear directorio mu-plugins"
+            echo ""
+            echo "💡 Soluciones:"
+            echo "  • Verificar permisos: chmod 755 '$wp_path/wp-content'"
+            echo "  • Crear manualmente: mkdir -p '$wp_path/wp-content/mu-plugins'"
+            echo ""
+            [ -n "$LOG_FILE" ] && log_error "Failed to create mu-plugins directory" "VALIDATION"
+            return 1
+        fi
+    fi
+    
+    if [ "$show_details" = true ]; then
+        print_success "Estructura WordPress válida"
+    fi
+    [ -n "$LOG_FILE" ] && log_success "WordPress structure validation passed" "VALIDATION"
+    return 0
+}
+
+# Function to show comprehensive CLI help
+show_cli_help() {
+    echo ""
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  📚 WordPress Init Project - Guía de Uso"
+    echo "══════════════════════════════════════════════════════════════"
+    echo ""
+    
+    echo "${BLUE}SINTAXIS:${NC}"
+    echo "  $0 [WORDPRESS_PATH] [MODE] [OPTIONS]"
+    echo ""
+    
+    echo "${BLUE}PARÁMETROS:${NC}"
+    echo "  WORDPRESS_PATH    Ruta al directorio de WordPress (requerido para ejecución externa)"
+    echo "  MODE             Modo de operación (1-4, opcional, por defecto: 1)"
+    echo ""
+    
+    echo "${BLUE}MODOS DE OPERACIÓN:${NC}"
+    echo "  ${GREEN}1${NC}    Configurar y formatear proyecto (completo)"
+    echo "       • Genera archivos de configuración"
+    echo "       • Formatea código existente"
+    echo "       • Instala dependencias si es necesario"
+    echo ""
+    echo "  ${GREEN}2${NC}    Solo configurar (sin formatear)"
+    echo "       • Genera solo archivos de configuración"
+    echo "       • No modifica código existente"
+    echo "       • Ideal para proyectos nuevos"
+    echo ""
+    echo "  ${GREEN}3${NC}    Solo formatear código existente"
+    echo "       • Requiere configuración previa (modo 1 o 2)"
+    echo "       • Formatea PHP con PHPCBF"
+    echo "       • Formatea JavaScript con ESLint"
+    echo ""
+    echo "  ${GREEN}4${NC}    Fusionar configuración (requiere jq)"
+    echo "       • Combina configuración nueva con existente"
+    echo "       • Preserva configuración personalizada"
+    echo "       • Ideal para proyectos con configuración previa"
+    echo ""
+    
+    echo "${BLUE}OPCIONES:${NC}"
+    echo "  --help, -h       Mostrar esta ayuda"
+    echo "  --version, -v    Mostrar versión del script"
+    echo ""
+    
+    echo "${BLUE}EJEMPLOS BÁSICOS:${NC}"
+    echo ""
+    echo "  ${YELLOW}# Configuración completa (modo interactivo)${NC}"
+    echo "  $0 /path/to/my-wordpress"
+    echo ""
+    echo "  ${YELLOW}# Configuración completa (modo no interactivo)${NC}"
+    echo "  $0 /path/to/my-wordpress 1"
+    echo ""
+    echo "  ${YELLOW}# Solo configurar sin formatear${NC}"
+    echo "  $0 ./my-project-wordpress 2"
+    echo ""
+    echo "  ${YELLOW}# Solo formatear código existente${NC}"
+    echo "  $0 /Users/user/Sites/project/wordpress 3"
+    echo ""
+    
+    echo "${BLUE}EJEMPLOS PARA ESTRUCTURAS ESPECÍFICAS:${NC}"
+    echo ""
+    echo "  ${MAGENTA}📁 Proyecto con Docker:${NC}"
+    echo "  Estructura:"
+    echo "    /Users/user/Sites/mi-proyecto/"
+    echo "    ├── docker/"
+    echo "    ├── docker-compose.yml"
+    echo "    ├── Jenkinsfile"
+    echo "    └── wordpress/          ← Directorio WordPress"
+    echo "        └── wp-content/"
+    echo ""
+    echo "  Comando:"
+    echo "    ${GREEN}cd /tmp && git clone <repo> wp-init${NC}"
+    echo "    ${GREEN}/tmp/wp-init/init-project.sh /Users/user/Sites/mi-proyecto/wordpress 1${NC}"
+    echo ""
+    
+    echo "  ${MAGENTA}📁 Proyecto con CI/CD:${NC}"
+    echo "  Estructura:"
+    echo "    /var/www/mi-sitio/"
+    echo "    ├── .gitlab-ci.yml"
+    echo "    ├── README.md"
+    echo "    └── wp/                 ← Directorio WordPress"
+    echo "        └── wp-content/"
+    echo ""
+    echo "  Comando:"
+    echo "    ${GREEN}git clone <repo> /tmp/wp-standards${NC}"
+    echo "    ${GREEN}/tmp/wp-standards/init-project.sh /var/www/mi-sitio/wp 2${NC}"
+    echo ""
+    
+    echo "  ${MAGENTA}📁 Proyecto con nombre personalizado:${NC}"
+    echo "  Estructura:"
+    echo "    /home/dev/projects/cliente-web/"
+    echo "    ├── docs/"
+    echo "    └── cliente-wordpress/  ← Directorio WordPress"
+    echo "        └── wp-content/"
+    echo ""
+    echo "  Comando:"
+    echo "    ${GREEN}/tmp/wp-init/init-project.sh /home/dev/projects/cliente-web/cliente-wordpress${NC}"
+    echo ""
+    
+    echo "${BLUE}FLUJO DE TRABAJO RECOMENDADO:${NC}"
+    echo ""
+    echo "  ${GREEN}1.${NC} ${YELLOW}Clonar plantilla externamente:${NC}"
+    echo "     git clone https://github.com/tu-usuario/wp-init.git /tmp/wp-init"
+    echo ""
+    echo "  ${GREEN}2.${NC} ${YELLOW}Ejecutar desde ubicación externa:${NC}"
+    echo "     /tmp/wp-init/init-project.sh /ruta/a/tu/wordpress [modo]"
+    echo ""
+    echo "  ${GREEN}3.${NC} ${YELLOW}Instalar dependencias (si es necesario):${NC}"
+    echo "     cd /ruta/a/tu/proyecto"
+    echo "     composer install"
+    echo "     npm install"
+    echo ""
+    echo "  ${GREEN}4.${NC} ${YELLOW}Verificar configuración:${NC}"
+    echo "     ./vendor/bin/phpcs --standard=phpcs.xml.dist"
+    echo "     npx eslint '**/*.{js,jsx,ts,tsx}'"
+    echo ""
+    
+    echo "${BLUE}VENTAJAS DEL FLUJO EXTERNO:${NC}"
+    echo "  ✅ No interfiere con archivos del proyecto"
+    echo "  ✅ Preserva configuración de Docker/CI/CD"
+    echo "  ✅ Funciona con cualquier estructura de proyecto"
+    echo "  ✅ Permite múltiples proyectos desde una plantilla"
+    echo "  ✅ Evita conflictos con .gitignore del proyecto"
+    echo ""
+    
+    echo "${BLUE}ARCHIVOS GENERADOS:${NC}"
+    echo "  📄 phpcs.xml.dist        - Configuración PHP CodeSniffer"
+    echo "  📄 phpstan.neon.dist     - Configuración PHPStan"
+    echo "  📄 eslint.config.js      - Configuración ESLint"
+    echo "  📄 package.json          - Dependencias JavaScript"
+    echo "  📄 composer.json         - Dependencias PHP"
+    echo "  📄 wp.code-workspace     - Workspace VSCode"
+    echo "  📁 .vscode/              - Configuración VSCode"
+    echo "  📄 .gitignore            - Archivos a ignorar"
+    echo "  📄 Makefile              - Comandos de desarrollo"
+    echo ""
+    
+    echo "${BLUE}SOLUCIÓN DE PROBLEMAS:${NC}"
+    echo ""
+    echo "  ${RED}Error: WordPress structure not found${NC}"
+    echo "  💡 Verifica que la ruta contenga wp-content/plugins/ y wp-content/themes/"
+    echo ""
+    echo "  ${RED}Error: Permission denied${NC}"
+    echo "  💡 Ejecuta: chmod 755 /ruta/del/proyecto"
+    echo ""
+    echo "  ${RED}Error: jq not found (Modo 4)${NC}"
+    echo "  💡 Instala jq: brew install jq (macOS) o apt-get install jq (Ubuntu)"
+    echo ""
+    
+    echo "${BLUE}MÁS INFORMACIÓN:${NC}"
+    echo "  📚 Documentación: https://github.com/tu-usuario/wp-init#readme"
+    echo "  🐛 Reportar bugs: https://github.com/tu-usuario/wp-init/issues"
+    echo "  💬 Soporte: https://github.com/tu-usuario/wp-init/discussions"
+    echo ""
+}
+
+# Function to show version information
+show_version() {
+    echo ""
+    echo "WordPress Init Project Script"
+    echo "Version: 2.0.0"
+    echo "Author: WordPress Standards Team"
+    echo "License: MIT"
+    echo ""
+    echo "Features:"
+    echo "  ✅ External WordPress path support"
+    echo "  ✅ Docker/CI/CD compatibility"
+    echo "  ✅ Automatic project structure detection"
+    echo "  ✅ Enhanced validation and error handling"
+    echo "  ✅ Recovery system with rollback support"
+    echo ""
+}
+
+# Legacy WordPress structure detection (for backward compatibility)
 detect_wordpress_structure() {
-    [ -d "wordpress/wp-content" ] && { WP_CONTENT_DIR="wordpress/wp-content"; return 0; }
-    [ -d "wp-content" ] && { WP_CONTENT_DIR="wp-content"; return 0; }
+    log_operation_start "DETECT_WORDPRESS_STRUCTURE" "Detecting WordPress structure"
+    
+    # If WordPress path is already configured via CLI, use it
+    if [ -n "$WORDPRESS_PATH" ]; then
+        log_info "Using pre-configured WordPress path: $WP_CONTENT_DIR" "STRUCTURE"
+        log_operation_end "DETECT_WORDPRESS_STRUCTURE" "SUCCESS" "Using external WordPress path"
+        return 0
+    fi
+    
+    # Legacy detection for backward compatibility
+    if [ -d "wordpress/wp-content" ]; then
+        WP_CONTENT_DIR="wordpress/wp-content"
+        print_info "Legacy mode: WordPress structure found at wordpress/wp-content"
+        log_info "Legacy WordPress structure detected: wordpress/wp-content" "STRUCTURE"
+        log_operation_end "DETECT_WORDPRESS_STRUCTURE" "SUCCESS" "Legacy structure found"
+        return 0
+    elif [ -d "wp-content" ]; then
+        WP_CONTENT_DIR="wp-content"
+        print_info "Legacy mode: WordPress structure found at wp-content"
+        log_info "Legacy WordPress structure detected: wp-content" "STRUCTURE"
+        log_operation_end "DETECT_WORDPRESS_STRUCTURE" "SUCCESS" "Direct structure found"
+        return 0
+    fi
+    
+    log_operation_end "DETECT_WORDPRESS_STRUCTURE" "FAILED" "No WordPress structure found"
     return 1
 }
 
@@ -902,9 +1499,14 @@ validate_file_operations() {
     fi
 }
 
-# Enhanced backup function with error handling - now uses recovery system
-create_backup() {
+# ====================================================================
+# Mode-Specific File Operations Module
+# ====================================================================
+
+# Function to create backup in project root directory
+create_project_backup() {
     local file="$1"
+    local backup_location="${PROJECT_ROOT:-./}"
     
     if [ ! -f "$file" ]; then
         log_warning "Backup requested for non-existent file: $file" "BACKUP"
@@ -912,13 +1514,13 @@ create_backup() {
         return 1
     fi
     
-    log_operation_start "BACKUP_FILE" "Creating backup for: $file"
+    log_operation_start "BACKUP_FILE" "Creating backup for: $file in project root"
     
     # Use recovery system if available, otherwise fallback to legacy backup
     if command -v recovery_manager >/dev/null 2>&1 && is_recovery_enabled; then
         # Initialize recovery system if not already done
         if [ -z "$RECOVERY_BASE_DIR" ] || [ ! -d "$RECOVERY_BASE_DIR" ]; then
-            init_recovery_system "./recovery"
+            init_recovery_system "$backup_location/recovery"
         fi
         
         # Create recovery point for this file
@@ -935,10 +1537,10 @@ create_backup() {
         fi
     fi
     
-    # Legacy backup system (fallback)
-    # Initialize backup directory if needed
+    # Legacy backup system (fallback) - create in project root
+    # Initialize backup directory in project root if needed
     if [ -z "$BACKUP_DIR" ]; then
-        BACKUP_DIR="./backup-$(date +%Y%m%d-%H%M%S)"
+        BACKUP_DIR="$backup_location/backup-$(date +%Y%m%d-%H%M%S)"
     fi
     
     # Create backup directory if it doesn't exist
@@ -949,24 +1551,290 @@ create_backup() {
             log_operation_end "BACKUP_FILE" "FAILED" "Could not create backup directory"
             return 1
         fi
-        log_file_operation "CREATE_DIR" "$BACKUP_DIR" "SUCCESS" "Backup directory created"
+        print_info "Backup directory created: $BACKUP_DIR" "BACKUP"
+        log_info "Backup directory created: $BACKUP_DIR" "BACKUP"
     fi
     
-    # Copy file to backup
-    if cp "$file" "$BACKUP_DIR/"; then
-        local backup_file="$BACKUP_DIR/$(basename "$file")"
-        print_info "Backup created: $backup_file" "BACKUP"
-        log_file_operation "BACKUP" "$file" "SUCCESS" "Backed up to: $backup_file"
-        log_operation_end "BACKUP_FILE" "SUCCESS" "File successfully backed up"
-        COPIED_FILES+=("$file")
+    # Create backup copy
+    local backup_file="$BACKUP_DIR/$(basename "$file")"
+    if cp "$file" "$backup_file"; then
+        print_success "Backup created: $backup_file" "BACKUP"
+        log_file_operation "BACKUP" "$file" "SUCCESS" "Backed up to $backup_file"
+        log_operation_end "BACKUP_FILE" "SUCCESS" "File backed up successfully"
+        COPIED_FILES+=("$backup_file")
         return 0
     else
-        print_error "Failed to backup file: $file" "BACKUP"
-        log_file_operation "BACKUP" "$file" "FAILED" "cp command failed"
-        log_operation_end "BACKUP_FILE" "FAILED" "Copy operation failed"
-        FAILED_OPERATIONS+=("backup:$file")
+        print_error "Failed to create backup: $backup_file" "BACKUP"
+        log_file_operation "BACKUP" "$file" "FAILED" "Copy operation failed"
+        log_operation_end "BACKUP_FILE" "FAILED" "Backup copy operation failed"
         return 1
     fi
+}
+
+# Mode 1: Create/overwrite files with backup
+mode_1_file_operation() {
+    local source="$1"
+    local target="$2"
+    local operation_type="${3:-copy}"  # copy or write
+    
+    log_operation_start "MODE_1_OPERATION" "Mode 1: Create/overwrite with backup - $target"
+    
+    # Create backup if target file exists
+    if [ -f "$target" ]; then
+        print_info "Creating backup for existing file: $target" "MODE_1"
+        if ! create_project_backup "$target"; then
+            print_warning "Backup failed, but continuing with operation" "MODE_1"
+            log_warning "Backup failed for $target but continuing" "MODE_1"
+        fi
+    fi
+    
+    # Perform the file operation
+    case "$operation_type" in
+        "copy")
+            if safe_file_operation "copy" "$source" "$target"; then
+                print_success "File created/updated: $target" "MODE_1"
+                log_operation_end "MODE_1_OPERATION" "SUCCESS" "File copied successfully"
+                return 0
+            else
+                print_error "Failed to copy file: $source -> $target" "MODE_1"
+                log_operation_end "MODE_1_OPERATION" "FAILED" "Copy operation failed"
+                return 1
+            fi
+            ;;
+        "write")
+            if safe_file_operation "write" "$source" "$target"; then
+                print_success "File created/updated: $target" "MODE_1"
+                log_operation_end "MODE_1_OPERATION" "SUCCESS" "File written successfully"
+                return 0
+            else
+                print_error "Failed to write file: $target" "MODE_1"
+                log_operation_end "MODE_1_OPERATION" "FAILED" "Write operation failed"
+                return 1
+            fi
+            ;;
+        *)
+            print_error "Unknown operation type: $operation_type" "MODE_1"
+            log_operation_end "MODE_1_OPERATION" "FAILED" "Unknown operation type"
+            return 1
+            ;;
+    esac
+}
+
+# Mode 2: Only create configuration files without formatting
+mode_2_file_operation() {
+    local source="$1"
+    local target="$2"
+    local operation_type="${3:-copy}"
+    
+    log_operation_start "MODE_2_OPERATION" "Mode 2: Configuration only - $target"
+    
+    # Check if file is a configuration file (not formatting-related)
+    local config_files="phpcs.xml.dist|phpstan.neon.dist|eslint.config.js|package.json|composer.json|wp.code-workspace|.vscode/settings.json|.gitignore|Makefile|bitbucket-pipelines.yml|commitlint.config.cjs|lighthouserc.js"
+    
+    if [[ "$target" =~ ^($config_files)$ ]] || [[ "$target" =~ \.vscode/ ]]; then
+        # This is a configuration file, proceed with creation
+        print_info "Creating configuration file: $target" "MODE_2"
+        
+        # Don't overwrite existing files in mode 2, just skip
+        if [ -f "$target" ]; then
+            print_warning "Configuration file already exists, skipping: $target" "MODE_2"
+            log_operation_end "MODE_2_OPERATION" "SKIPPED" "File already exists"
+            return 0
+        fi
+        
+        # Create the file
+        case "$operation_type" in
+            "copy")
+                if safe_file_operation "copy" "$source" "$target"; then
+                    print_success "Configuration file created: $target" "MODE_2"
+                    log_operation_end "MODE_2_OPERATION" "SUCCESS" "Configuration file created"
+                    return 0
+                else
+                    print_error "Failed to create configuration file: $target" "MODE_2"
+                    log_operation_end "MODE_2_OPERATION" "FAILED" "Copy operation failed"
+                    return 1
+                fi
+                ;;
+            "write")
+                if safe_file_operation "write" "$source" "$target"; then
+                    print_success "Configuration file created: $target" "MODE_2"
+                    log_operation_end "MODE_2_OPERATION" "SUCCESS" "Configuration file written"
+                    return 0
+                else
+                    print_error "Failed to write configuration file: $target" "MODE_2"
+                    log_operation_end "MODE_2_OPERATION" "FAILED" "Write operation failed"
+                    return 1
+                fi
+                ;;
+        esac
+    else
+        # Not a configuration file, skip in mode 2
+        print_info "Skipping non-configuration file in mode 2: $target" "MODE_2"
+        log_operation_end "MODE_2_OPERATION" "SKIPPED" "Not a configuration file"
+        return 0
+    fi
+}
+
+# Mode 3: Only format using existing configuration
+mode_3_file_operation() {
+    local source="$1"
+    local target="$2"
+    local operation_type="${3:-copy}"
+    
+    log_operation_start "MODE_3_OPERATION" "Mode 3: Format only - $target"
+    
+    # Mode 3 should not create new configuration files
+    # It should only work with existing configuration for formatting
+    print_info "Mode 3: Skipping file creation (format-only mode): $target" "MODE_3"
+    log_operation_end "MODE_3_OPERATION" "SKIPPED" "Mode 3 does not create files"
+    return 0
+}
+
+# Mode 4: Intelligently merge JSON files (package.json, composer.json)
+mode_4_file_operation() {
+    local source="$1"
+    local target="$2"
+    local operation_type="${3:-copy}"
+    
+    log_operation_start "MODE_4_OPERATION" "Mode 4: Intelligent merge - $target"
+    
+    # Check if this is a JSON file that can be merged
+    if [[ "$target" == "package.json" ]] || [[ "$target" == "composer.json" ]]; then
+        if [ -f "$target" ]; then
+            print_info "Merging existing JSON file: $target" "MODE_4"
+            
+            # Create backup first
+            if ! create_project_backup "$target"; then
+                print_warning "Backup failed for $target, but continuing" "MODE_4"
+            fi
+            
+            # Perform intelligent merge (this will use existing merge functions)
+            if [[ "$target" == "package.json" ]]; then
+                # Use existing package.json merge logic
+                if merge_package_json_intelligent "$source" "$target"; then
+                    print_success "Successfully merged package.json" "MODE_4"
+                    log_operation_end "MODE_4_OPERATION" "SUCCESS" "package.json merged"
+                    return 0
+                else
+                    print_error "Failed to merge package.json" "MODE_4"
+                    log_operation_end "MODE_4_OPERATION" "FAILED" "package.json merge failed"
+                    return 1
+                fi
+            elif [[ "$target" == "composer.json" ]]; then
+                # Use existing composer.json merge logic
+                if merge_composer_json_intelligent "$source" "$target"; then
+                    print_success "Successfully merged composer.json" "MODE_4"
+                    log_operation_end "MODE_4_OPERATION" "SUCCESS" "composer.json merged"
+                    return 0
+                else
+                    print_error "Failed to merge composer.json" "MODE_4"
+                    log_operation_end "MODE_4_OPERATION" "FAILED" "composer.json merge failed"
+                    return 1
+                fi
+            fi
+        else
+            # File doesn't exist, create new one
+            print_info "Creating new JSON file: $target" "MODE_4"
+            case "$operation_type" in
+                "copy")
+                    if safe_file_operation "copy" "$source" "$target"; then
+                        print_success "JSON file created: $target" "MODE_4"
+                        log_operation_end "MODE_4_OPERATION" "SUCCESS" "New JSON file created"
+                        return 0
+                    fi
+                    ;;
+                "write")
+                    if safe_file_operation "write" "$source" "$target"; then
+                        print_success "JSON file created: $target" "MODE_4"
+                        log_operation_end "MODE_4_OPERATION" "SUCCESS" "New JSON file written"
+                        return 0
+                    fi
+                    ;;
+            esac
+            print_error "Failed to create JSON file: $target" "MODE_4"
+            log_operation_end "MODE_4_OPERATION" "FAILED" "File creation failed"
+            return 1
+        fi
+    else
+        # Non-JSON files: create with backup like mode 1
+        print_info "Non-JSON file, using mode 1 behavior: $target" "MODE_4"
+        mode_1_file_operation "$source" "$target" "$operation_type"
+        return $?
+    fi
+}
+
+# Main function to perform file operations according to selected mode
+perform_mode_specific_file_operation() {
+    local source="$1"
+    local target="$2"
+    local operation_type="${3:-copy}"
+    
+    # Ensure target path is relative to project root if PROJECT_ROOT is set
+    if [ -n "$PROJECT_ROOT" ] && [[ "$target" != /* ]]; then
+        # Change to project root for file operations
+        local original_dir=$(pwd)
+        cd "$PROJECT_ROOT" || {
+            print_error "Cannot change to project root: $PROJECT_ROOT"
+            return 1
+        }
+        
+        # Perform the operation
+        local result=0
+        case "$MODE" in
+            1)
+                mode_1_file_operation "$source" "$target" "$operation_type"
+                result=$?
+                ;;
+            2)
+                mode_2_file_operation "$source" "$target" "$operation_type"
+                result=$?
+                ;;
+            3)
+                mode_3_file_operation "$source" "$target" "$operation_type"
+                result=$?
+                ;;
+            4)
+                mode_4_file_operation "$source" "$target" "$operation_type"
+                result=$?
+                ;;
+            *)
+                print_error "Invalid mode: $MODE"
+                result=1
+                ;;
+        esac
+        
+        # Return to original directory
+        cd "$original_dir" || print_warning "Could not return to original directory: $original_dir"
+        return $result
+    else
+        # No project root set or absolute path, perform operation in current directory
+        case "$MODE" in
+            1)
+                mode_1_file_operation "$source" "$target" "$operation_type"
+                ;;
+            2)
+                mode_2_file_operation "$source" "$target" "$operation_type"
+                ;;
+            3)
+                mode_3_file_operation "$source" "$target" "$operation_type"
+                ;;
+            4)
+                mode_4_file_operation "$source" "$target" "$operation_type"
+                ;;
+            *)
+                print_error "Invalid mode: $MODE"
+                return 1
+                ;;
+        esac
+    fi
+}
+
+# Enhanced backup function with error handling - now uses recovery system
+create_backup() {
+    local file="$1"
+    
+    # Delegate to project backup function for consistency
+    create_project_backup "$file"
 }
 
 # Enhanced file operation with error handling
@@ -1894,6 +2762,127 @@ generate_makefile_from_template() {
 # JSON Merge Functions for Mode 4
 # ====================================================================
 
+# Intelligent merge function for package.json (used by mode 4)
+merge_package_json_intelligent() {
+    local new_content="$1"  # Content to merge (from source)
+    local target_file="$2"  # Target file path
+    
+    log_operation_start "MERGE_PACKAGE_JSON_INTELLIGENT" "Intelligent merge for $target_file"
+    
+    if [ ! -f "$target_file" ]; then
+        print_error "Target file not found for merge: $target_file"
+        log_operation_end "MERGE_PACKAGE_JSON_INTELLIGENT" "FAILED" "Target file not found"
+        return 1
+    fi
+    
+    # Create temporary file with new content
+    local temp_new_file="/tmp/new_package_$$.json"
+    echo "$new_content" > "$temp_new_file"
+    
+    # Validate new content is valid JSON
+    if ! jq empty "$temp_new_file" 2>/dev/null; then
+        print_error "New package.json content is not valid JSON"
+        rm -f "$temp_new_file"
+        log_operation_end "MERGE_PACKAGE_JSON_INTELLIGENT" "FAILED" "Invalid JSON content"
+        return 1
+    fi
+    
+    # Perform intelligent merge using jq
+    local temp_merged="/tmp/merged_package_$$.json"
+    if jq -s '.[0] * .[1] | 
+        .scripts = (.[0].scripts // {}) * (.[1].scripts // {}) |
+        .dependencies = (.[0].dependencies // {}) * (.[1].dependencies // {}) |
+        .devDependencies = (.[0].devDependencies // {}) * (.[1].devDependencies // {})' \
+        "$target_file" "$temp_new_file" > "$temp_merged" 2>/dev/null; then
+        
+        # Validate merged result
+        if jq empty "$temp_merged" 2>/dev/null; then
+            if mv "$temp_merged" "$target_file"; then
+                print_success "package.json merged intelligently"
+                log_operation_end "MERGE_PACKAGE_JSON_INTELLIGENT" "SUCCESS" "Intelligent merge completed"
+                rm -f "$temp_new_file"
+                return 0
+            else
+                print_error "Failed to replace package.json with merged version"
+                log_operation_end "MERGE_PACKAGE_JSON_INTELLIGENT" "FAILED" "File replacement failed"
+                rm -f "$temp_new_file" "$temp_merged"
+                return 1
+            fi
+        else
+            print_error "Merged package.json is invalid JSON"
+            log_operation_end "MERGE_PACKAGE_JSON_INTELLIGENT" "FAILED" "Merged result invalid"
+            rm -f "$temp_new_file" "$temp_merged"
+            return 1
+        fi
+    else
+        print_error "jq merge operation failed for package.json"
+        log_operation_end "MERGE_PACKAGE_JSON_INTELLIGENT" "FAILED" "jq merge failed"
+        rm -f "$temp_new_file" "$temp_merged"
+        return 1
+    fi
+}
+
+# Intelligent merge function for composer.json (used by mode 4)
+merge_composer_json_intelligent() {
+    local new_content="$1"  # Content to merge (from source)
+    local target_file="$2"  # Target file path
+    
+    log_operation_start "MERGE_COMPOSER_JSON_INTELLIGENT" "Intelligent merge for $target_file"
+    
+    if [ ! -f "$target_file" ]; then
+        print_error "Target file not found for merge: $target_file"
+        log_operation_end "MERGE_COMPOSER_JSON_INTELLIGENT" "FAILED" "Target file not found"
+        return 1
+    fi
+    
+    # Create temporary file with new content
+    local temp_new_file="/tmp/new_composer_$$.json"
+    echo "$new_content" > "$temp_new_file"
+    
+    # Validate new content is valid JSON
+    if ! jq empty "$temp_new_file" 2>/dev/null; then
+        print_error "New composer.json content is not valid JSON"
+        rm -f "$temp_new_file"
+        log_operation_end "MERGE_COMPOSER_JSON_INTELLIGENT" "FAILED" "Invalid JSON content"
+        return 1
+    fi
+    
+    # Perform intelligent merge using jq
+    local temp_merged="/tmp/merged_composer_$$.json"
+    if jq -s '.[0] * .[1] | 
+        .require = (.[0].require // {}) * (.[1].require // {}) |
+        ."require-dev" = (.[0]."require-dev" // {}) * (.[1]."require-dev" // {}) |
+        .scripts = (.[0].scripts // {}) * (.[1].scripts // {}) |
+        .autoload = (.[0].autoload // {}) * (.[1].autoload // {})' \
+        "$target_file" "$temp_new_file" > "$temp_merged" 2>/dev/null; then
+        
+        # Validate merged result
+        if jq empty "$temp_merged" 2>/dev/null; then
+            if mv "$temp_merged" "$target_file"; then
+                print_success "composer.json merged intelligently"
+                log_operation_end "MERGE_COMPOSER_JSON_INTELLIGENT" "SUCCESS" "Intelligent merge completed"
+                rm -f "$temp_new_file"
+                return 0
+            else
+                print_error "Failed to replace composer.json with merged version"
+                log_operation_end "MERGE_COMPOSER_JSON_INTELLIGENT" "FAILED" "File replacement failed"
+                rm -f "$temp_new_file" "$temp_merged"
+                return 1
+            fi
+        else
+            print_error "Merged composer.json is invalid JSON"
+            log_operation_end "MERGE_COMPOSER_JSON_INTELLIGENT" "FAILED" "Merged result invalid"
+            rm -f "$temp_new_file" "$temp_merged"
+            return 1
+        fi
+    else
+        print_error "jq merge operation failed for composer.json"
+        log_operation_end "MERGE_COMPOSER_JSON_INTELLIGENT" "FAILED" "jq merge failed"
+        rm -f "$temp_new_file" "$temp_merged"
+        return 1
+    fi
+}
+
 merge_package_json() {
     local existing_file="package.json"
     local temp_file="package.json.tmp"
@@ -2261,10 +3250,21 @@ generate_project_files() {
 SCRIPT_START_TIME=$(date '+%Y-%m-%d %H:%M:%S %Z')
 init_logging
 
+# Show help if requested (before parsing other arguments)
+if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+    show_cli_help
+    exit 0
+fi
+
+# Parse CLI arguments first
+parse_cli_arguments "$@"
+
 # Initialize recovery system
 if command -v recovery_manager >/dev/null 2>&1; then
-    init_recovery_system "./recovery"
-    log_info "Recovery system initialized" "RECOVERY"
+    # Use project root if available, otherwise current directory
+    recovery_dir="${PROJECT_ROOT:-./}/recovery"
+    init_recovery_system "$recovery_dir"
+    log_info "Recovery system initialized at: $recovery_dir" "RECOVERY"
 else
     log_warning "Recovery system not available - using legacy backup only" "RECOVERY"
 fi
@@ -2275,6 +3275,8 @@ echo "╔═══════════════════════�
 echo "║  🚀 WordPress Standards & Formatting                         ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
+
+
 
 # Verificar requisitos
 log_info "Starting WordPress Standards & Formatting Script"
@@ -2291,18 +3293,74 @@ print_success "Requisitos verificados"
 log_success "System requirements check completed"
 echo ""
 
+# Handle WordPress path configuration
+if [ -z "$WORDPRESS_PATH" ]; then
+    # No WordPress path provided via CLI, check execution context
+    if ! detect_execution_context; then
+        # External execution without WordPress path - prompt user
+        echo "══════════════════════════════════════════════════════════════"
+        echo "  WordPress Directory Configuration"
+        echo "══════════════════════════════════════════════════════════════"
+        echo ""
+        print_info "External execution detected. Please specify WordPress directory path."
+        echo ""
+        echo "Examples:"
+        echo "  /Users/user/Sites/my-project/wordpress"
+        echo "  ./my-wordpress-directory"
+        echo "  /var/www/my-site"
+        echo ""
+        
+        while true; do
+            echo -n "WordPress directory path: "
+            read wordpress_input
+            echo ""
+            
+            if [ -n "$wordpress_input" ]; then
+                if handle_wordpress_path "$wordpress_input"; then
+                    break
+                else
+                    print_error "Invalid WordPress path. Please try again."
+                    echo ""
+                fi
+            else
+                print_warning "WordPress path cannot be empty. Please try again."
+                echo ""
+            fi
+        done
+        echo ""
+    fi
+fi
+
+# Change to project root directory if we're using external WordPress path
+if [ -n "$PROJECT_ROOT" ] && [ "$PROJECT_ROOT" != "$(pwd)" ]; then
+    print_info "Changing to project root directory: $PROJECT_ROOT"
+    if cd "$PROJECT_ROOT"; then
+        log_info "Changed working directory to project root: $PROJECT_ROOT" "PATH_HANDLING"
+    else
+        print_error "Failed to change to project root directory: $PROJECT_ROOT"
+        log_error "Failed to change to project root: $PROJECT_ROOT" "PATH_HANDLING"
+        exit 1
+    fi
+fi
+
 # Modo de operación
-echo "══════════════════════════════════════════════════════════════"
-echo "  Modo de Operación"
-echo "══════════════════════════════════════════════════════════════"
-echo "  1️⃣  Configurar y formatear proyecto"
-echo "  2️⃣  Solo configurar (sin formatear)"
-echo "  3️⃣  Solo formatear código existente"
-echo "  4️⃣  Fusionar configuración (requiere jq)"
-echo ""
-echo -n "Selecciona modo (1-4): "
-read MODE
-echo ""
+if [ "$NON_INTERACTIVE" = false ] && [ -z "$MODE" ]; then
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  Modo de Operación"
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  1️⃣  Configurar y formatear proyecto"
+    echo "  2️⃣  Solo configurar (sin formatear)"
+    echo "  3️⃣  Solo formatear código existente"
+    echo "  4️⃣  Fusionar configuración (requiere jq)"
+    echo ""
+    echo -n "Selecciona modo (1-4): "
+    read MODE
+    echo ""
+elif [ -z "$MODE" ]; then
+    # Default mode for non-interactive execution
+    MODE=1
+    print_info "Using default mode: 1 (Configure and format project)"
+fi
 
 FORMAT_CODE=false
 CONFIGURE_PROJECT=false
@@ -2332,8 +3390,27 @@ fi
 echo ""
 
 # Detectar estructura WordPress
-detect_wordpress_structure || { print_error "Estructura WordPress no encontrada"; exit 1; }
-print_success "Estructura detectada: $WP_CONTENT_DIR"
+if ! detect_wordpress_structure; then
+    print_error "WordPress structure not found"
+    echo ""
+    print_info "This script requires a valid WordPress installation with wp-content directory."
+    echo ""
+    print_info "For external execution, use:"
+    echo "  $0 /path/to/wordpress [mode]"
+    echo ""
+    print_info "For legacy execution from project root, ensure one of these exists:"
+    echo "  • ./wp-content/"
+    echo "  • ./wordpress/wp-content/"
+    echo ""
+    show_cli_help
+    exit 1
+fi
+
+print_success "WordPress structure detected: $WP_CONTENT_DIR"
+if [ -n "$PROJECT_ROOT" ]; then
+    print_info "Project root: $PROJECT_ROOT"
+    print_info "WordPress directory: $WORDPRESS_RELATIVE_PATH"
+fi
 echo ""
 
 # Detectar componentes
@@ -2376,24 +3453,30 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     [ ${#DETECTED_PLUGINS[@]} -gt 0 ] && {
         echo "--- Plugins ---"
         for plugin in "${DETECTED_PLUGINS[@]}"; do
-            while true; do
-                echo -n "¿Incluir '$plugin'? (y/n): "
-                read resp
-                case "$resp" in
-                    [Yy]|[Yy][Ee][Ss]|[Ss]|[Ss][Ii])
-                        SELECTED_PLUGINS+=("$plugin")
-                        print_success "Plugin '$plugin' añadido"
-                        break
-                        ;;
-                    [Nn]|[Nn][Oo])
-                        print_info "Plugin '$plugin' omitido"
-                        break
-                        ;;
-                    *)
-                        print_warning "Por favor responde 'y' para sí o 'n' para no"
-                        ;;
-                esac
-            done
+            if [ "$NON_INTERACTIVE" = true ]; then
+                # In non-interactive mode, include all detected plugins
+                SELECTED_PLUGINS+=("$plugin")
+                print_success "Plugin '$plugin' añadido (modo automático)"
+            else
+                while true; do
+                    echo -n "¿Incluir '$plugin'? (y/n): "
+                    read resp
+                    case "$resp" in
+                        [Yy]|[Yy][Ee][Ss]|[Ss]|[Ss][Ii])
+                            SELECTED_PLUGINS+=("$plugin")
+                            print_success "Plugin '$plugin' añadido"
+                            break
+                            ;;
+                        [Nn]|[Nn][Oo])
+                            print_info "Plugin '$plugin' omitido"
+                            break
+                            ;;
+                        *)
+                            print_warning "Por favor responde 'y' para sí o 'n' para no"
+                            ;;
+                    esac
+                done
+            fi
         done
         echo ""
     }
@@ -2401,24 +3484,30 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     [ ${#DETECTED_THEMES[@]} -gt 0 ] && {
         echo "--- Temas ---"
         for theme in "${DETECTED_THEMES[@]}"; do
-            while true; do
-                echo -n "¿Incluir '$theme'? (y/n): "
-                read resp
-                case "$resp" in
-                    [Yy]|[Yy][Ee][Ss]|[Ss]|[Ss][Ii])
-                        SELECTED_THEMES+=("$theme")
-                        print_success "Tema '$theme' añadido"
-                        break
-                        ;;
-                    [Nn]|[Nn][Oo])
-                        print_info "Tema '$theme' omitido"
-                        break
-                        ;;
-                    *)
-                        print_warning "Por favor responde 'y' para sí o 'n' para no"
-                        ;;
-                esac
-            done
+            if [ "$NON_INTERACTIVE" = true ]; then
+                # In non-interactive mode, include all detected themes
+                SELECTED_THEMES+=("$theme")
+                print_success "Tema '$theme' añadido (modo automático)"
+            else
+                while true; do
+                    echo -n "¿Incluir '$theme'? (y/n): "
+                    read resp
+                    case "$resp" in
+                        [Yy]|[Yy][Ee][Ss]|[Ss]|[Ss][Ii])
+                            SELECTED_THEMES+=("$theme")
+                            print_success "Tema '$theme' añadido"
+                            break
+                            ;;
+                        [Nn]|[Nn][Oo])
+                            print_info "Tema '$theme' omitido"
+                            break
+                            ;;
+                        *)
+                            print_warning "Por favor responde 'y' para sí o 'n' para no"
+                            ;;
+                    esac
+                done
+            fi
         done
         echo ""
     }
@@ -2426,24 +3515,30 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     [ ${#DETECTED_MU_PLUGINS[@]} -gt 0 ] && {
         echo "--- MU-Plugins ---"
         for mu in "${DETECTED_MU_PLUGINS[@]}"; do
-            while true; do
-                echo -n "¿Incluir '$mu'? (y/n): "
-                read resp
-                case "$resp" in
-                    [Yy]|[Yy][Ee][Ss]|[Ss]|[Ss][Ii])
-                        SELECTED_MU_PLUGINS+=("$mu")
-                        print_success "MU-Plugin '$mu' añadido"
-                        break
-                        ;;
-                    [Nn]|[Nn][Oo])
-                        print_info "MU-Plugin '$mu' omitido"
-                        break
-                        ;;
-                    *)
-                        print_warning "Por favor responde 'y' para sí o 'n' para no"
-                        ;;
-                esac
-            done
+            if [ "$NON_INTERACTIVE" = true ]; then
+                # In non-interactive mode, include all detected mu-plugins
+                SELECTED_MU_PLUGINS+=("$mu")
+                print_success "MU-Plugin '$mu' añadido (modo automático)"
+            else
+                while true; do
+                    echo -n "¿Incluir '$mu'? (y/n): "
+                    read resp
+                    case "$resp" in
+                        [Yy]|[Yy][Ee][Ss]|[Ss]|[Ss][Ii])
+                            SELECTED_MU_PLUGINS+=("$mu")
+                            print_success "MU-Plugin '$mu' añadido"
+                            break
+                            ;;
+                        [Nn]|[Nn][Oo])
+                            print_info "MU-Plugin '$mu' omitido"
+                            break
+                            ;;
+                        *)
+                            print_warning "Por favor responde 'y' para sí o 'n' para no"
+                            ;;
+                    esac
+                done
+            fi
         done
         echo ""
     }
@@ -2563,9 +3658,14 @@ if [ -f "composer.json" ]; then
     if [ -n "$DETECTED" ] && [ "$DETECTED" != "wordpress" ] && [ "$DETECTED" != "my-project" ]; then
         echo ""
         print_info "Detectado desde composer.json: $DETECTED"
-        read -p "¿Usar este nombre? (y/n): " resp < /dev/tty
-        echo ""
-        [[ $resp =~ ^[Yy]$ ]] && PROJECT_SLUG="$DETECTED"
+        if [ "$NON_INTERACTIVE" = true ]; then
+            PROJECT_SLUG="$DETECTED"
+            print_success "Usando nombre detectado automáticamente: $DETECTED"
+        else
+            read -p "¿Usar este nombre? (y/n): " resp < /dev/tty
+            echo ""
+            [[ $resp =~ ^[Yy]$ ]] && PROJECT_SLUG="$DETECTED"
+        fi
     fi
 fi
 
@@ -2576,31 +3676,54 @@ if [ -z "$PROJECT_SLUG" ] && [ -f "package.json" ]; then
     if [ -n "$DETECTED" ] && [ "$DETECTED" != "wordpress" ] && [ "$DETECTED" != "my-project" ]; then
         echo ""
         print_info "Detectado desde package.json: $DETECTED"
-        read -p "¿Usar este nombre? (y/n): " resp < /dev/tty
-        echo ""
-        [[ $resp =~ ^[Yy]$ ]] && PROJECT_SLUG="$DETECTED"
+        if [ "$NON_INTERACTIVE" = true ]; then
+            PROJECT_SLUG="$DETECTED"
+            print_success "Usando nombre detectado automáticamente: $DETECTED"
+        else
+            read -p "¿Usar este nombre? (y/n): " resp < /dev/tty
+            echo ""
+            [[ $resp =~ ^[Yy]$ ]] && PROJECT_SLUG="$DETECTED"
+        fi
     fi
 fi
 
-# Solicitar nombre si no se detectó
-if [ -z "$PROJECT_SLUG" ]; then
+# Generate default project slug from WordPress directory name if in non-interactive mode
+if [ -z "$PROJECT_SLUG" ] && [ "$NON_INTERACTIVE" = true ] && [ -n "$WORDPRESS_RELATIVE_PATH" ]; then
+    # Use WordPress directory name as project slug, removing common suffixes
+    DETECTED=$(echo "$WORDPRESS_RELATIVE_PATH" | sed -e 's/-wordpress$//' -e 's/_wordpress$//' -e 's/wordpress$//' -e 's/wp$//')
+    if [ -n "$DETECTED" ] && validate_slug "$DETECTED" 2>/dev/null; then
+        PROJECT_SLUG="$DETECTED"
+        print_success "Generated project slug from WordPress directory: $PROJECT_SLUG"
+    else
+        # Fallback to generic name in non-interactive mode
+        PROJECT_SLUG="my-project"
+        print_warning "Using fallback project slug: $PROJECT_SLUG"
+    fi
+fi
+
+# Solicitar nombre si no se detectó (solo en modo interactivo)
+if [ -z "$PROJECT_SLUG" ] && [ "$NON_INTERACTIVE" = false ]; then
     echo ""
     print_warning "No se pudo detectar el nombre automáticamente"
+    
+    while [ -z "$PROJECT_SLUG" ]; do
+        echo ""
+        echo -n "Nombre del proyecto (slug, ej: astro-headless): "
+        read PROJECT_SLUG
+        echo ""
+        if [ -z "$PROJECT_SLUG" ]; then
+            print_error "El nombre no puede estar vacío"
+            continue
+        fi
+        if ! validate_slug "$PROJECT_SLUG"; then
+            PROJECT_SLUG=""
+        fi
+    done
+elif [ -z "$PROJECT_SLUG" ]; then
+    # Final fallback for non-interactive mode
+    PROJECT_SLUG="my-project"
+    print_warning "Using default project slug: $PROJECT_SLUG"
 fi
-
-while [ -z "$PROJECT_SLUG" ]; do
-    echo ""
-    echo -n "Nombre del proyecto (slug, ej: astro-headless): "
-    read PROJECT_SLUG
-    echo ""
-    if [ -z "$PROJECT_SLUG" ]; then
-        print_error "El nombre no puede estar vacío"
-        continue
-    fi
-    if ! validate_slug "$PROJECT_SLUG"; then
-        PROJECT_SLUG=""
-    fi
-done
 
 print_success "Proyecto: $PROJECT_SLUG"
 echo ""
@@ -2679,31 +3802,30 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     
     # phpcs.xml.dist
     print_info "Generando phpcs.xml.dist..."
-    cat > phpcs.xml.dist << PHPCS_EOF
-<?xml version="1.0"?>
-<ruleset name="WordPress Project PHP Standards">
+    local phpcs_content="<?xml version=\"1.0\"?>
+<ruleset name=\"WordPress Project PHP Standards\">
     <description>PHP CodeSniffer rules for WordPress project</description>
 
-    <rule ref="WordPress">
-        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
-        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
-        <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
-        <exclude name="Squiz.Commenting.FunctionComment.Missing"/>
-        <exclude name="Squiz.Commenting.FileComment.Missing"/>
-        <exclude name="Squiz.Commenting.ClassComment.Missing"/>
-        <exclude name="Squiz.Commenting.VariableComment.Missing"/>
+    <rule ref=\"WordPress\">
+        <exclude name=\"WordPress.Files.FileName.InvalidClassFileName\"/>
+        <exclude name=\"WordPress.Files.FileName.NotHyphenatedLowercase\"/>
+        <exclude name=\"Squiz.Commenting.InlineComment.InvalidEndChar\"/>
+        <exclude name=\"Squiz.Commenting.FunctionComment.Missing\"/>
+        <exclude name=\"Squiz.Commenting.FileComment.Missing\"/>
+        <exclude name=\"Squiz.Commenting.ClassComment.Missing\"/>
+        <exclude name=\"Squiz.Commenting.VariableComment.Missing\"/>
     </rule>
 
-    <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+    <rule ref=\"WordPress.NamingConventions.PrefixAllGlobals\">
         <properties>
-            <property name="prefixes" type="array">
+            <property name=\"prefixes\" type=\"array\">
 $(echo -e "$PREFIXES")            </property>
         </properties>
     </rule>
 
-    <rule ref="WordPress.WP.I18n">
+    <rule ref=\"WordPress.WP.I18n\">
         <properties>
-            <property name="text_domain" type="array">
+            <property name=\"text_domain\" type=\"array\">
 $(echo -e "$TEXT_DOMAINS")            </property>
         </properties>
     </rule>
@@ -2719,15 +3841,19 @@ $(echo -e "$FILES")
     <exclude-pattern>${WP_CONTENT_DIR%/*}/wp-admin/*</exclude-pattern>
     <exclude-pattern>${WP_CONTENT_DIR%/*}/wp-includes/*</exclude-pattern>
 
-    <arg name="extensions" value="php"/>
-    <arg value="p"/>
-    <arg value="s"/>
-    <arg name="parallel" value="8"/>
-    <config name="ignore_warnings_on_exit" value="1"/>
-</ruleset>
-PHPCS_EOF
+    <arg name=\"extensions\" value=\"php\"/>
+    <arg value=\"p\"/>
+    <arg value=\"s\"/>
+    <arg name=\"parallel\" value=\"8\"/>
+    <config name=\"ignore_warnings_on_exit\" value=\"1\"/>
+</ruleset>"
     
-    print_success "phpcs.xml.dist generado"
+    # Use mode-specific file operation
+    if perform_mode_specific_file_operation "$phpcs_content" "phpcs.xml.dist" "write"; then
+        print_success "phpcs.xml.dist generado"
+    else
+        print_error "Error generando phpcs.xml.dist"
+    fi
     
     # phpstan.neon.dist
     print_info "Generando phpstan.neon.dist..."
@@ -2779,8 +3905,7 @@ PHPSTAN_EOF
         ESLINT_FILES+="      '${WP_CONTENT_DIR}/themes/${t}/**/*.{js,jsx,ts,tsx}',\n"
     done
     
-    cat > eslint.config.js << 'ESLINT_EOF'
-import js from '@eslint/js';
+    local eslint_content="import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
@@ -2794,13 +3919,9 @@ export default [
       sourceType: 'module',
       globals: { ...globals.browser, ...globals.node, wp: 'readonly', jQuery: 'readonly', $: 'readonly', __: 'readonly' },
     },
-ESLINT_EOF
-    
-    echo "    files: [" >> eslint.config.js
-    echo -e "$ESLINT_FILES" | sed '$ s/,$//' >> eslint.config.js
-    echo "    ]," >> eslint.config.js
-    
-    cat >> eslint.config.js << 'ESLINT_RULES'
+    files: [
+$(echo -e "$ESLINT_FILES" | sed '$ s/,$//')
+    ],
     rules: {
       'array-bracket-spacing': ['error', 'always'],
       'space-in-parens': ['error', 'always'],
@@ -2823,214 +3944,134 @@ ESLINT_EOF
       'no-var': 'error',
     },
   },
-];
-ESLINT_RULES
+];"
     
-    print_success "eslint.config.js generado"
-    
-    # Handle package.json based on mode
-    if [ "$MERGE_MODE" = true ]; then
-        if [ -f "package.json" ]; then
-            print_info "Fusionando package.json existente..."
-            if ! merge_package_json; then
-                if handle_non_fatal_error "MERGE_PACKAGE_JSON" "Failed to merge package.json" "PROMPT" "MERGE_OPERATIONS"; then
-                    print_info "Continuing without package.json merge..." "RECOVERY"
-                    log_info "User chose to continue without package.json merge" "RECOVERY"
-                else
-                    print_error "Critical merge failure - attempting recovery" "MERGE"
-                    
-                    # Try automatic recovery first
-                    if command -v auto_recover >/dev/null 2>&1 && is_recovery_enabled; then
-                        if auto_recover "merge_package_json" "MERGE_OPERATIONS" "E5005"; then
-                            print_success "Automatic recovery successful" "RECOVERY"
-                            log_info "Automatic recovery successful for package.json merge" "RECOVERY"
-                        else
-                            print_warning "Automatic recovery failed - manual intervention required" "RECOVERY"
-                            rollback_merge_operation "package.json"
-                            show_recovery_options 1 "MERGE_OPERATIONS"
-                            exit 1
-                        fi
-                    else
-                        rollback_merge_operation "package.json"
-                        show_recovery_options 1 "MERGE_OPERATIONS"
-                        exit 1
-                    fi
-                fi
-            fi
-        else
-            print_warning "package.json no existe - creando nuevo archivo"
-            # Create new file in merge mode
-            cat > package.json << PACKAGE_EOF
-{
-  "name": "${PROJECT_SLUG}",
-  "version": "1.0.0",
-  "description": "WordPress project with coding standards",
-  "type": "module",
-  "scripts": {
-    "lint:js": "eslint '**/*.{js,jsx,ts,tsx}'",
-    "lint:js:fix": "eslint --fix '**/*.{js,jsx,ts,tsx}'",
-    "lint:php": "./vendor/bin/phpcs --standard=phpcs.xml.dist",
-    "lint:php:fix": "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
-    "lint": "npm run lint:js && npm run lint:php",
-    "format": "npm run lint:js:fix && npm run lint:php:fix"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.9.0",
-    "eslint": "^9.9.0",
-    "globals": "^15.9.0"
-  },
-  "author": "",
-  "license": "MIT"
-}
-PACKAGE_EOF
-            print_success "package.json creado"
-        fi
+    # Use mode-specific file operation
+    if perform_mode_specific_file_operation "$eslint_content" "eslint.config.js" "write"; then
+        print_success "eslint.config.js generado"
     else
-        # Normal mode - only create if doesn't exist
-        if [ ! -f "package.json" ]; then
-            print_info "Generando package.json..."
-            cat > package.json << PACKAGE_EOF
-{
-  "name": "${PROJECT_SLUG}",
-  "version": "1.0.0",
-  "description": "WordPress project with coding standards",
-  "type": "module",
-  "scripts": {
-    "lint:js": "eslint '**/*.{js,jsx,ts,tsx}'",
-    "lint:js:fix": "eslint --fix '**/*.{js,jsx,ts,tsx}'",
-    "lint:php": "./vendor/bin/phpcs --standard=phpcs.xml.dist",
-    "lint:php:fix": "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
-    "lint": "npm run lint:js && npm run lint:php",
-    "format": "npm run lint:js:fix && npm run lint:php:fix"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.9.0",
-    "eslint": "^9.9.0",
-    "globals": "^15.9.0"
-  },
-  "author": "",
-  "license": "MIT"
-}
-PACKAGE_EOF
-            print_success "package.json generado"
-        fi
+        print_error "Error generando eslint.config.js"
     fi
     
-    # Handle composer.json based on mode
-    if [ "$MERGE_MODE" = true ]; then
-        if [ -f "composer.json" ]; then
-            print_info "Fusionando composer.json existente..."
-            if ! merge_composer_json; then
-                if handle_non_fatal_error "MERGE_COMPOSER_JSON" "Failed to merge composer.json" "PROMPT" "MERGE_OPERATIONS"; then
-                    print_info "Continuing without composer.json merge..." "RECOVERY"
-                    log_info "User chose to continue without composer.json merge" "RECOVERY"
-                else
-                    print_error "Critical merge failure - attempting recovery" "MERGE"
-                    
-                    # Try automatic recovery first
-                    if command -v auto_recover >/dev/null 2>&1 && is_recovery_enabled; then
-                        if auto_recover "merge_composer_json" "MERGE_OPERATIONS" "E5005"; then
-                            print_success "Automatic recovery successful" "RECOVERY"
-                            log_info "Automatic recovery successful for composer.json merge" "RECOVERY"
-                        else
-                            print_warning "Automatic recovery failed - manual intervention required" "RECOVERY"
-                            rollback_merge_operation "composer.json"
-                            show_recovery_options 1 "MERGE_OPERATIONS"
-                            exit 1
-                        fi
-                    else
-                        rollback_merge_operation "composer.json"
-                        show_recovery_options 1 "MERGE_OPERATIONS"
-                        exit 1
-                    fi
-                fi
-            fi
-        else
-            print_warning "composer.json no existe - creando nuevo archivo"
-            # Create new file in merge mode
-            cat > composer.json << COMPOSER_EOF
-{
-    "name": "${PROJECT_SLUG}/wordpress",
-    "description": "WordPress project with coding standards",
-    "type": "project",
-    "require": {
-        "php": ">=8.1"
-    },
-    "require-dev": {
-        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
-        "phpcompatibility/php-compatibility": "^9.3",
-        "phpstan/phpstan": "^1.11",
-        "wp-coding-standards/wpcs": "^3.1"
-    },
-    "config": {
-        "allow-plugins": {
-            "dealerdirect/phpcodesniffer-composer-installer": true
-        }
-    },
-    "scripts": {
-        "lint": "phpcs --standard=phpcs.xml.dist",
-        "lint:fix": "phpcbf --standard=phpcs.xml.dist",
-        "analyze": "phpstan analyze"
-    }
-}
-COMPOSER_EOF
-            print_success "composer.json creado"
-        fi
+    # Handle package.json using mode-specific operations
+    print_info "Procesando package.json..."
+    local package_content="{
+  \"name\": \"${PROJECT_SLUG}\",
+  \"version\": \"1.0.0\",
+  \"description\": \"WordPress project with coding standards\",
+  \"type\": \"module\",
+  \"scripts\": {
+    \"lint:js\": \"eslint '**/*.{js,jsx,ts,tsx}'\",
+    \"lint:js:fix\": \"eslint --fix '**/*.{js,jsx,ts,tsx}'\",
+    \"lint:php\": \"./vendor/bin/phpcs --standard=phpcs.xml.dist\",
+    \"lint:php:fix\": \"./vendor/bin/phpcbf --standard=phpcs.xml.dist\",
+    \"lint\": \"npm run lint:js && npm run lint:php\",
+    \"format\": \"npm run lint:js:fix && npm run lint:php:fix\"
+  },
+  \"devDependencies\": {
+    \"@eslint/js\": \"^9.9.0\",
+    \"eslint\": \"^9.9.0\",
+    \"globals\": \"^15.9.0\"
+  },
+  \"author\": \"\",
+  \"license\": \"MIT\"
+}"
+    
+    # Use mode-specific file operation
+    if perform_mode_specific_file_operation "$package_content" "package.json" "write"; then
+        print_success "package.json procesado según modo $MODE"
     else
-        # Normal mode - only create if doesn't exist
-        if [ ! -f "composer.json" ]; then
-            print_info "Generando composer.json..."
-            cat > composer.json << COMPOSER_EOF
-{
-    "name": "${PROJECT_SLUG}/wordpress",
-    "description": "WordPress project with coding standards",
-    "type": "project",
-    "require": {
-        "php": ">=8.1"
-    },
-    "require-dev": {
-        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
-        "phpcompatibility/php-compatibility": "^9.3",
-        "phpstan/phpstan": "^1.11",
-        "wp-coding-standards/wpcs": "^3.1"
-    },
-    "config": {
-        "allow-plugins": {
-            "dealerdirect/phpcodesniffer-composer-installer": true
-        }
-    },
-    "scripts": {
-        "lint": "phpcs --standard=phpcs.xml.dist",
-        "lint:fix": "phpcbf --standard=phpcs.xml.dist",
-        "analyze": "phpstan analyze"
-    }
-}
-COMPOSER_EOF
-            print_success "composer.json generado"
-        fi
+        print_error "Error procesando package.json"
     fi
     
-    # Generar carpeta .vscode si no existe
-    if [ ! -d ".vscode" ]; then
-        print_info "Generando configuración de VSCode..."
-        mkdir -p .vscode
-        
-        # extensions.json
-        cat > .vscode/extensions.json << 'VSCODE_EXT_EOF'
-{
-  "recommendations": [
-    "bmewburn.vscode-intelephense-client",
-    "valeryanm.vscode-phpsab",
-    "dbaeumer.vscode-eslint",
-    "stylelint.vscode-stylelint",
-    "esbenp.prettier-vscode",
-    "editorconfig.editorconfig"
+    # Handle composer.json using mode-specific operations
+    print_info "Procesando composer.json..."
+    local composer_content="{
+    \"name\": \"${PROJECT_SLUG}/wordpress\",
+    \"description\": \"WordPress project with coding standards\",
+    \"type\": \"project\",
+    \"require\": {
+        \"php\": \">=8.1\"
+    },
+    \"require-dev\": {
+        \"dealerdirect/phpcodesniffer-composer-installer\": \"^1.0\",
+        \"phpcompatibility/php-compatibility\": \"^9.3\",
+        \"phpstan/phpstan\": \"^1.11\",
+        \"wp-coding-standards/wpcs\": \"^3.1\"
+    },
+    \"config\": {
+        \"allow-plugins\": {
+            \"dealerdirect/phpcodesniffer-composer-installer\": true
+        }
+    },
+    \"scripts\": {
+        \"lint\": \"phpcs --standard=phpcs.xml.dist\",
+        \"lint:fix\": \"phpcbf --standard=phpcs.xml.dist\",
+        \"analyze\": \"phpstan analyze\"
+    }
+}"
+    
+    # Use mode-specific file operation
+    if perform_mode_specific_file_operation "$composer_content" "composer.json" "write"; then
+        print_success "composer.json procesado según modo $MODE"
+    else
+        print_error "Error procesando composer.json"
+    fi
+    
+    # Generar configuración de VSCode usando operaciones específicas por modo
+    print_info "Procesando configuración de VSCode..."
+    
+    # extensions.json content
+    local extensions_content="{
+  \"recommendations\": [
+    \"bmewburn.vscode-intelephense-client\",
+    \"valeryanm.vscode-phpsab\",
+    \"dbaeumer.vscode-eslint\",
+    \"stylelint.vscode-stylelint\",
+    \"esbenp.prettier-vscode\",
+    \"editorconfig.editorconfig\"
   ]
-}
-VSCODE_EXT_EOF
-        
-        # settings.json
-        cat > .vscode/settings.json << 'VSCODE_SETTINGS_EOF'
+}"
+    
+    # settings.json content
+    local settings_content="{
+  \"editor.rulers\": [120],
+  \"editor.tabSize\": 4,
+  \"editor.insertSpaces\": false,
+  \"editor.detectIndentation\": false,
+  \"editor.formatOnSave\": true,
+  
+  // PHPCS configuration
+  \"phpcs.enable\": true,
+  \"phpcs.standard\": \"./phpcs.xml.dist\",
+  \"phpcs.executablePath\": \"./vendor/bin/phpcs\",
+  \"phpcs.showSources\": true,
+  \"phpcs.showSniffSource\": true,
+  
+  // PHPSAB configuration
+  \"phpsab.snifferMode\": \"onType\",
+  \"phpsab.snifferShowSources\": true,
+  
+  // ESLint configuration
+  \"eslint.enable\": true,
+  \"eslint.validate\": [\"javascript\", \"javascriptreact\", \"typescript\", \"typescriptreact\"],
+  \"eslint.workingDirectories\": [\".\"],
+  
+  // Stylelint configuration
+  \"stylelint.enable\": true,
+  \"stylelint.validate\": [\"css\", \"scss\", \"sass\"],
+  
+  // PHP language settings
+  \"[php]\": {
+    \"editor.defaultFormatter\": \"valeryanm.vscode-phpsab\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 4,
+    \"editor.insertSpaces\": false,
+    \"editor.rulers\": [120],
+    \"editor.codeActionsOnSave\": {
+      \"source.fixAll\": \"always\"
+    }
+  },
 {
   "editor.rulers": [120],
   "editor.tabSize": 4,
@@ -3071,115 +4112,119 @@ VSCODE_EXT_EOF
   },
   
   // JavaScript language settings
-  "[javascript]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": "always"
+  \"[javascript]\": {
+    \"editor.defaultFormatter\": \"dbaeumer.vscode-eslint\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true,
+    \"editor.codeActionsOnSave\": {
+      \"source.fixAll.eslint\": \"always\"
     }
   },
   
   // JavaScript React settings
-  "[javascriptreact]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": "always"
+  \"[javascriptreact]\": {
+    \"editor.defaultFormatter\": \"dbaeumer.vscode-eslint\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true,
+    \"editor.codeActionsOnSave\": {
+      \"source.fixAll.eslint\": \"always\"
     }
   },
   
   // TypeScript settings
-  "[typescript]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": "always"
+  \"[typescript]\": {
+    \"editor.defaultFormatter\": \"dbaeumer.vscode-eslint\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true,
+    \"editor.codeActionsOnSave\": {
+      \"source.fixAll.eslint\": \"always\"
     }
   },
   
   // TypeScript React settings
-  "[typescriptreact]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": "always"
+  \"[typescriptreact]\": {
+    \"editor.defaultFormatter\": \"dbaeumer.vscode-eslint\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true,
+    \"editor.codeActionsOnSave\": {
+      \"source.fixAll.eslint\": \"always\"
     }
   },
   
   // CSS language settings
-  "[css]": {
-    "editor.defaultFormatter": "stylelint.vscode-stylelint",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "editor.codeActionsOnSave": {
-      "source.fixAll.stylelint": "always"
+  \"[css]\": {
+    \"editor.defaultFormatter\": \"stylelint.vscode-stylelint\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true,
+    \"editor.codeActionsOnSave\": {
+      \"source.fixAll.stylelint\": \"always\"
     }
   },
   
   // SCSS language settings
-  "[scss]": {
-    "editor.defaultFormatter": "stylelint.vscode-stylelint",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "editor.codeActionsOnSave": {
-      "source.fixAll.stylelint": "always"
+  \"[scss]\": {
+    \"editor.defaultFormatter\": \"stylelint.vscode-stylelint\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true,
+    \"editor.codeActionsOnSave\": {
+      \"source.fixAll.stylelint\": \"always\"
     }
   },
   
   // JSON settings
-  "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true
+  \"[json]\": {
+    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true
   },
   
   // JSONC settings
-  "[jsonc]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true
+  \"[jsonc]\": {
+    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true
   },
   
   // Markdown settings
-  "[markdown]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "editor.wordWrap": "on"
+  \"[markdown]\": {
+    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true,
+    \"editor.wordWrap\": \"on\"
   },
   
   // YAML settings
-  "[yaml]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true
+  \"[yaml]\": {
+    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true
   },
   
   // HTML settings
-  "[html]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true
+  \"[html]\": {
+    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
+    \"editor.formatOnSave\": true,
+    \"editor.tabSize\": 2,
+    \"editor.insertSpaces\": true
   }
-}
-VSCODE_SETTINGS_EOF
-        
-        print_success ".vscode/ generado"
+}"
+    
+    # Use mode-specific file operations for VSCode configuration
+    if perform_mode_specific_file_operation "$extensions_content" ".vscode/extensions.json" "write" && \
+       perform_mode_specific_file_operation "$settings_content" ".vscode/settings.json" "write"; then
+        print_success ".vscode/ procesado según modo $MODE"
+    else
+        print_error "Error procesando configuración de VSCode"
     fi
     
     # Generate workspace file with selected components

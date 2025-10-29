@@ -1,0 +1,37 @@
+# WordPress Init Test Suite Configuration
+# Copy this file to test-config.conf and customize as needed
+
+# === EXECUTION SETTINGS ===
+TEST_PARALLEL_JOBS=4                    # Number of parallel test jobs
+TEST_TIMEOUT=60                         # Test timeout in seconds
+TEST_DEFAULT_SUITE=all                  # Default test suite (unit|integration|e2e|all)
+TEST_DEFAULT_PATTERN="*"                # Default test file pattern
+
+# === OUTPUT SETTINGS ===
+TEST_REPORTS_DIR="./test-reports"       # Directory for test reports
+TEST_DEFAULT_FORMAT=console             # Default report format (console|json|html|all)
+TEST_VERBOSE=false                      # Enable verbose output by default
+TEST_QUIET=false                        # Enable quiet mode by default
+
+# === MOCK ENVIRONMENT SETTINGS ===
+TEST_MOCK_DIR="/tmp/wp-init-test-mocks" # Directory for mock environments
+MOCK_CLEANUP_ON_EXIT=true               # Cleanup mock environments on exit
+
+# === PERFORMANCE SETTINGS ===
+TEST_PERFORMANCE_TRACKING=false         # Enable performance tracking by default
+TEST_TREND_ANALYSIS=false               # Enable trend analysis by default
+TEST_REGRESSION_CHECK=false             # Enable regression checking by default
+
+# === FILTERING SETTINGS ===
+TEST_DEFAULT_TAGS=""                    # Default tags to filter by (comma-separated)
+TEST_EXCLUDE_TAGS=""                    # Tags to exclude (comma-separated)
+
+# === CI/CD INTEGRATION ===
+CI_MODE=false                           # Enable CI mode (affects output formatting)
+CI_FAIL_FAST=false                      # Stop on first failure in CI mode
+CI_ARTIFACT_DIR=""                      # Directory for CI artifacts
+
+# === ADVANCED SETTINGS ===
+TEST_MEMORY_LIMIT="512M"                # Memory limit for test processes
+TEST_TEMP_CLEANUP_INTERVAL=300          # Cleanup temp files every N seconds
+TEST_MAX_LOG_SIZE="10M"                 # Maximum log file size

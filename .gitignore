@@ -2,3 +2,18 @@ auth.json
 .kiro/*
 vendor/*
 node_modules/*
+
+# Test reports and outputs (generated files)
+test-reports/
+observability-output/
+
+# Test configuration files
+tests/test-config.conf
+tests/test-config.local
+.test-config
+
+# Additional test configs that might be created
+tests/**/*.local
+tests/**/*.tmp
+tests/**/temp/
+tests/**/cache/

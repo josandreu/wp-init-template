@@ -116,9 +116,11 @@ main() {
     
     # Make scripts executable
     chmod +x "$SCRIPT_DIR/e2e/scenarios/test_new_project_setup.sh" 2>/dev/null || true
+    chmod +x "$SCRIPT_DIR/e2e/scenarios/test_user_scenario_external_wordpress.sh" 2>/dev/null || true
     chmod +x "$SCRIPT_DIR/e2e/regression/test_regression_scenarios.sh" 2>/dev/null || true
     
     run_test_suite "New Project Setup" "$SCRIPT_DIR/e2e/scenarios/test_new_project_setup.sh"
+    run_test_suite "User Scenario External WordPress" "$SCRIPT_DIR/e2e/scenarios/test_user_scenario_external_wordpress.sh"
     run_test_suite "Regression Scenarios" "$SCRIPT_DIR/e2e/regression/test_regression_scenarios.sh"
     
     # Print final results

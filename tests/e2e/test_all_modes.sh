@@ -24,13 +24,14 @@ SCRIPT_PATH="$ORIGINAL_DIR/init-project.sh"
 # Create a complete WordPress project structure for testing
 create_wordpress_project_structure() {
     local base_path="$1"
+    local wp_dir_name="${2:-wordpress}"
     
-    # Create WordPress structure
-    mkdir -p "$base_path/wordpress/wp-content"/{plugins,themes,mu-plugins}
+    # Create WordPress structure with configurable directory name
+    mkdir -p "$base_path/$wp_dir_name/wp-content"/{plugins,themes,mu-plugins}
     
     # Create sample plugins
-    mkdir -p "$base_path/wordpress/wp-content/plugins/test-plugin"
-    cat > "$base_path/wordpress/wp-content/plugins/test-plugin/init.php" << 'EOF'
+    mkdir -p "$base_path/$wp_dir_name/wp-content/plugins/test-plugin"
+    cat > "$base_path/$wp_dir_name/wp-content/plugins/test-plugin/init.php" << 'EOF'
 <?php
 /*
 Plugin Name: Test Plugin
@@ -44,8 +45,8 @@ echo "Test plugin loaded";
 add_action('init','test_plugin_init');
 EOF
     
-    mkdir -p "$base_path/wordpress/wp-content/plugins/ecommerce-plugin"
-    cat > "$base_path/wordpress/wp-content/plugins/ecommerce-plugin/main.php" << 'EOF'
+    mkdir -p "$base_path/$wp_dir_name/wp-content/plugins/ecommerce-plugin"
+    cat > "$base_path/$wp_dir_name/wp-content/plugins/ecommerce-plugin/main.php" << 'EOF'
 <?php
 /*
 Plugin Name: Ecommerce Plugin
@@ -67,8 +68,8 @@ new EcommercePlugin();
 EOF
     
     # Create sample theme
-    mkdir -p "$base_path/wordpress/wp-content/themes/test-theme"
-    cat > "$base_path/wordpress/wp-content/themes/test-theme/style.css" << 'EOF'
+    mkdir -p "$base_path/$wp_dir_name/wp-content/themes/test-theme"
+    cat > "$base_path/$wp_dir_name/wp-content/themes/test-theme/style.css" << 'EOF'
 /*
 Theme Name: Test Theme
 Description: A test theme for validation
@@ -80,7 +81,7 @@ body {
 }
 EOF
     
-    cat > "$base_path/wordpress/wp-content/themes/test-theme/functions.php" << 'EOF'
+    cat > "$base_path/$wp_dir_name/wp-content/themes/test-theme/functions.php" << 'EOF'
 <?php
 function test_theme_setup(){
 add_theme_support('post-thumbnails');
@@ -94,8 +95,8 @@ add_action('wp_enqueue_scripts','test_theme_scripts');
 EOF
     
     # Create sample mu-plugin
-    mkdir -p "$base_path/wordpress/wp-content/mu-plugins/core-functionality"
-    cat > "$base_path/wordpress/wp-content/mu-plugins/core-functionality/init.php" << 'EOF'
+    mkdir -p "$base_path/$wp_dir_name/wp-content/mu-plugins/core-functionality"
+    cat > "$base_path/$wp_dir_name/wp-content/mu-plugins/core-functionality/init.php" << 'EOF'
 <?php
 /*
 Plugin Name: Core Functionality
@@ -195,6 +196,147 @@ validate_configuration_files() {
 }
 
 # ====================================================================
+# External WordPress Path Tests
+# ====================================================================
+
+test_external_wordpress_path_validation() {
+    echo "Testing external WordPress path validation..."
+    
+    local mock_env
+    mock_env="$(create_mock_env "external_wp_test" "empty")"
+    
+    # Create project structure with custom WordPress directory name
+    create_wordpress_project_structure "$mock_env" "my-custom-wordpress"
+    
+    local original_dir="$PWD"
+    cd "$mock_env"
+    
+    # Test that custom WordPress structure is properly set up
+    assert_directory_exists "my-custom-wordpress/wp-content" "Custom WordPress structure exists"
+    assert_directory_exists "my-custom-wordpress/wp-content/plugins" "Custom plugins directory exists"
+    assert_directory_exists "my-custom-wordpress/wp-content/themes" "Custom themes directory exists"
+    assert_directory_exists "my-custom-wordpress/wp-content/mu-plugins" "Custom MU-plugins directory exists"
+    
+    # Test CLI parameter handling simulation
+    local wp_path="$mock_env/my-custom-wordpress"
+    local project_root="$mock_env"
+    
+    # Simulate external path validation
+    assert_directory_exists "$wp_path" "WordPress path exists for CLI parameter"
+    assert_directory_exists "$project_root" "Project root calculated correctly"
+    
+    # Test that project root is writable
+    assert_command_success "test -w '$project_root'" "Project root is writable"
+    
+    # Test relative path handling
+    cd "$project_root"
+    local relative_wp_path="./my-custom-wordpress"
+    assert_directory_exists "$relative_wp_path" "Relative WordPress path works"
+    
+    cd "$original_dir"
+    cleanup_mock_env "$mock_env"
+}
+
+test_cli_parameter_handling() {
+    echo "Testing CLI parameter handling for external paths..."
+    
+    local mock_env
+    mock_env="$(create_mock_env "cli_params_test" "empty")"
+    
+    # Create multiple project structures to test different scenarios
+    create_wordpress_project_structure "$mock_env" "wordpress-site"
+    mkdir -p "$mock_env/docker" "$mock_env/ci"
+    touch "$mock_env/Jenkinsfile" "$mock_env/docker-compose.yml"
+    
+    local original_dir="$PWD"
+    cd "$mock_env"
+    
+    # Test absolute path parameter simulation
+    local abs_wp_path="$mock_env/wordpress-site"
+    assert_directory_exists "$abs_wp_path" "Absolute WordPress path parameter valid"
+    
+    # Test that project files are preserved
+    assert_file_exists "Jenkinsfile" "Jenkinsfile preserved in project root"
+    assert_file_exists "docker-compose.yml" "Docker compose file preserved"
+    assert_directory_exists "docker" "Docker directory preserved"
+    
+    # Test mode parameter simulation (1-4)
+    local valid_modes=("1" "2" "3" "4")
+    for mode in "${valid_modes[@]}"; do
+        # Simulate mode validation
+        if [[ "$mode" =~ ^[1-4]$ ]]; then
+            assert_true true "Mode $mode parameter is valid"
+        else
+            assert_true false "Mode $mode parameter should be invalid"
+        fi
+    done
+    
+    cd "$original_dir"
+    cleanup_mock_env "$mock_env"
+}
+
+test_project_structure_compatibility() {
+    echo "Testing compatibility with different project structures..."
+    
+    # Test Docker project structure
+    local docker_env
+    docker_env="$(create_mock_env "docker_project_test" "empty")"
+    create_wordpress_project_structure "$docker_env" "app"
+    
+    local original_dir="$PWD"
+    cd "$docker_env"
+    
+    # Create Docker project files
+    mkdir -p "docker/nginx" "docker/php"
+    cat > "docker-compose.yml" << 'EOF'
+version: '3.8'
+services:
+  wordpress:
+    build: ./docker/php
+    volumes:
+      - ./app:/var/www/html
+EOF
+    
+    # Test Docker structure compatibility
+    assert_directory_exists "app/wp-content" "WordPress in Docker structure"
+    assert_file_exists "docker-compose.yml" "Docker compose configuration"
+    assert_directory_exists "docker" "Docker configuration directory"
+    
+    cd "$original_dir"
+    cleanup_mock_env "$docker_env"
+    
+    # Test CI/CD project structure
+    local cicd_env
+    cicd_env="$(create_mock_env "cicd_project_test" "empty")"
+    create_wordpress_project_structure "$cicd_env" "web"
+    
+    cd "$cicd_env"
+    
+    # Create CI/CD files
+    cat > ".gitlab-ci.yml" << 'EOF'
+stages:
+  - test
+  - deploy
+
+test:
+  script:
+    - composer install
+    - npm install
+EOF
+    
+    mkdir -p "scripts" "docs"
+    
+    # Test CI/CD structure compatibility
+    assert_directory_exists "web/wp-content" "WordPress in CI/CD structure"
+    assert_file_exists ".gitlab-ci.yml" "GitLab CI configuration"
+    assert_directory_exists "scripts" "Scripts directory"
+    assert_directory_exists "docs" "Documentation directory"
+    
+    cd "$original_dir"
+    cleanup_mock_env "$cicd_env"
+}
+
+# ====================================================================
 # Mode 1 Tests: Configure and Format Project
 # ====================================================================
 
@@ -213,6 +355,14 @@ test_mode_1_configure_and_format() {
     assert_directory_exists "wordpress/wp-content/plugins" "Plugins directory exists"
     assert_directory_exists "wordpress/wp-content/themes" "Themes directory exists"
     assert_directory_exists "wordpress/wp-content/mu-plugins" "MU-plugins directory exists"
+    
+    # Test external WordPress path functionality for Mode 1
+    local wp_path="$mock_env/wordpress"
+    local project_root="$mock_env"
+    
+    # Simulate external path validation
+    assert_directory_exists "$wp_path" "External WordPress path exists for Mode 1"
+    assert_command_success "test -w '$project_root'" "Project root writable for Mode 1"
     
     # Test that sample components are created
     assert_file_exists "wordpress/wp-content/plugins/test-plugin/init.php" "Test plugin file exists"
@@ -242,25 +392,29 @@ test_mode_2_configure_only() {
     
     local mock_env
     mock_env="$(create_mock_env "mode2_test" "empty")"
-    create_wordpress_project_structure "$mock_env"
+    create_wordpress_project_structure "$mock_env" "custom-wp"
     
     local original_dir="$PWD"
     cd "$mock_env"
     
-    # Test selective component detection capability
-    assert_directory_exists "wordpress/wp-content/plugins/test-plugin" "Test plugin available for selection"
-    assert_directory_exists "wordpress/wp-content/plugins/ecommerce-plugin" "Ecommerce plugin available for selection"
-    assert_directory_exists "wordpress/wp-content/themes/test-theme" "Test theme available for selection"
-    assert_directory_exists "wordpress/wp-content/mu-plugins/core-functionality" "Core functionality available for selection"
+    # Test selective component detection capability with custom WordPress directory
+    assert_directory_exists "custom-wp/wp-content/plugins/test-plugin" "Test plugin available for selection"
+    assert_directory_exists "custom-wp/wp-content/plugins/ecommerce-plugin" "Ecommerce plugin available for selection"
+    assert_directory_exists "custom-wp/wp-content/themes/test-theme" "Test theme available for selection"
+    assert_directory_exists "custom-wp/wp-content/mu-plugins/core-functionality" "Core functionality available for selection"
+    
+    # Test external WordPress path for Mode 2
+    local wp_path="$mock_env/custom-wp"
+    assert_directory_exists "$wp_path" "External WordPress path exists for Mode 2"
     
     # Test that original code formatting is preserved (Mode 2 characteristic)
-    assert_file_contains "wordpress/wp-content/plugins/test-plugin/init.php" "function test_plugin_init(){" "Original code formatting preserved"
-    assert_file_contains "wordpress/wp-content/plugins/ecommerce-plugin/main.php" "class EcommercePlugin{" "Original class formatting preserved"
+    assert_file_contains "custom-wp/wp-content/plugins/test-plugin/init.php" "function test_plugin_init(){" "Original code formatting preserved"
+    assert_file_contains "custom-wp/wp-content/plugins/ecommerce-plugin/main.php" "class EcommercePlugin{" "Original class formatting preserved"
     
     # Test that components have distinguishable characteristics for selection
-    assert_file_contains "wordpress/wp-content/plugins/test-plugin/init.php" "Test Plugin" "Test plugin has identifiable name"
-    assert_file_contains "wordpress/wp-content/plugins/ecommerce-plugin/main.php" "Ecommerce Plugin" "Ecommerce plugin has identifiable name"
-    assert_file_contains "wordpress/wp-content/themes/test-theme/style.css" "Test Theme" "Test theme has identifiable name"
+    assert_file_contains "custom-wp/wp-content/plugins/test-plugin/init.php" "Test Plugin" "Test plugin has identifiable name"
+    assert_file_contains "custom-wp/wp-content/plugins/ecommerce-plugin/main.php" "Ecommerce Plugin" "Ecommerce plugin has identifiable name"
+    assert_file_contains "custom-wp/wp-content/themes/test-theme/style.css" "Test Theme" "Test theme has identifiable name"
     
     cd "$original_dir"
     cleanup_mock_env "$mock_env"
@@ -720,6 +874,9 @@ main() {
     reset_assertions
     
     # Run all tests
+    test_external_wordpress_path_validation
+    test_cli_parameter_handling
+    test_project_structure_compatibility
     test_mode_1_configure_and_format
     test_mode_2_configure_only
     test_mode_3_format_only

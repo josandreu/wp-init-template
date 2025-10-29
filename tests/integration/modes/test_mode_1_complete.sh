@@ -5,9 +5,9 @@
 
 # Source test dependencies
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../../lib/assertions.sh"
-source "$SCRIPT_DIR/../../lib/mock-env.sh"
-source "$SCRIPT_DIR/../../lib/validation-engine.sh"
+source "$SCRIPT_DIR/../lib/assertions.sh"
+source "$SCRIPT_DIR/../lib/mock-env.sh"
+source "$SCRIPT_DIR/../lib/validation-engine.sh"
 
 # Test setup
 setup_mode1_tests() {
@@ -222,11 +222,29 @@ test_mode1_minimal_config() {
     # Test validation phase
     init_validation_engine "CONFIGURE"
     
-    # Validate WordPress structure
+    # Validate WordPress structure (legacy mode)
     if validate_wordpress_structure "CONFIGURE"; then
-        print_assertion "PASS" "Should validate WordPress structure"
+        print_assertion "PASS" "Should validate WordPress structure (legacy)"
     else
-        print_assertion "FAIL" "Should validate WordPress structure"
+        print_assertion "FAIL" "Should validate WordPress structure (legacy)"
+    fi
+    
+    # Test external WordPress path validation
+    local external_wp_path="$TEST_ENV/wp-content"
+    export WORDPRESS_PATH="$external_wp_path"
+    export PROJECT_ROOT="$TEST_ENV"
+    
+    if validate_external_wordpress_structure "CONFIGURE" "$external_wp_path"; then
+        print_assertion "PASS" "Should validate external WordPress structure"
+    else
+        print_assertion "FAIL" "Should validate external WordPress structure"
+    fi
+    
+    # Test project root calculation
+    if validate_project_root_calculation "CONFIGURE" "$external_wp_path" "$TEST_ENV"; then
+        print_assertion "PASS" "Should validate project root calculation"
+    else
+        print_assertion "FAIL" "Should validate project root calculation"
     fi
     
     # Validate write permissions
@@ -438,6 +456,98 @@ test_mode1_file_operations() {
     teardown_mode1_tests
 }
 
+# Test Mode 1 with external WordPress paths
+test_mode1_external_wordpress_paths() {
+    echo "Testing Mode 1 with external WordPress paths..."
+    
+    # Create test environment with custom WordPress directory
+    local external_test_env
+    external_test_env=$(create_mock_env "mode1_external_test")
+    
+    # Create project structure with custom WordPress directory name
+    mkdir -p "$external_test_env/my-wordpress-site/wp-content"/{plugins,themes,mu-plugins}
+    mkdir -p "$external_test_env/docker" "$external_test_env/ci"
+    touch "$external_test_env/Jenkinsfile"
+    
+    cd "$external_test_env"
+    
+    # Copy main script to test environment
+    cp "$SCRIPT_DIR/../../../init-project.sh" .
+    
+    # Create test templates
+    create_test_templates
+    
+    # Create sample components in custom WordPress directory
+    mkdir -p "my-wordpress-site/wp-content/plugins/external-plugin"
+    cat > "my-wordpress-site/wp-content/plugins/external-plugin/plugin.php" << 'EOF'
+<?php
+/**
+ * Plugin Name: External Plugin
+ * Description: Plugin in external WordPress directory
+ */
+class ExternalPlugin {
+    public function __construct() {
+        add_action('init', array($this, 'init'));
+    }
+    
+    public function init() {
+        // Plugin initialization
+    }
+}
+new ExternalPlugin();
+EOF
+    
+    # Test external WordPress path setup
+    local wp_path="$external_test_env/my-wordpress-site"
+    local project_root="$external_test_env"
+    
+    export WORDPRESS_PATH="$wp_path"
+    export PROJECT_ROOT="$project_root"
+    export PROJECT_SLUG="external-test-project"
+    export SELECTED_PLUGINS=("external-plugin")
+    export SELECTED_THEMES=()
+    export SELECTED_MU_PLUGINS=()
+    
+    # Test validation with external paths
+    init_validation_engine "CONFIGURE"
+    
+    if validate_external_wordpress_structure "CONFIGURE" "$wp_path"; then
+        print_assertion "PASS" "Should validate external WordPress structure"
+    else
+        print_assertion "FAIL" "Should validate external WordPress structure"
+    fi
+    
+    if validate_project_root_calculation "CONFIGURE" "$wp_path" "$project_root"; then
+        print_assertion "PASS" "Should calculate project root correctly"
+    else
+        print_assertion "FAIL" "Should calculate project root correctly"
+    fi
+    
+    # Test component validation with external paths
+    local selected_plugins=("${SELECTED_PLUGINS[@]}")
+    if validate_component_directories "CONFIGURE" "plugins" selected_plugins; then
+        print_assertion "PASS" "Should validate external plugin directories"
+    else
+        print_assertion "FAIL" "Should validate external plugin directories"
+    fi
+    
+    # Test that project files are preserved
+    if [ -f "Jenkinsfile" ]; then
+        print_assertion "PASS" "Should preserve existing project files"
+    else
+        print_assertion "FAIL" "Should preserve existing project files"
+    fi
+    
+    if [ -d "docker" ]; then
+        print_assertion "PASS" "Should preserve existing project directories"
+    else
+        print_assertion "FAIL" "Should preserve existing project directories"
+    fi
+    
+    cd - > /dev/null
+    cleanup_mock_env "$external_test_env"
+}
+
 # Run all Mode 1 tests
 run_mode1_integration_tests() {
     echo "🧪 Running Mode 1 Integration Tests..."
@@ -445,6 +555,7 @@ run_mode1_integration_tests() {
     
     test_mode1_minimal_config
     test_mode1_with_components
+    test_mode1_external_wordpress_paths
     test_mode1_validation_failures
     test_mode1_template_processing
     test_mode1_file_operations

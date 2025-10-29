@@ -5,9 +5,9 @@
 
 # Source test dependencies
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../../lib/assertions.sh"
-source "$SCRIPT_DIR/../../lib/mock-env.sh"
-source "$SCRIPT_DIR/../../lib/validation-engine.sh"
+source "$SCRIPT_DIR/../lib/assertions.sh"
+source "$SCRIPT_DIR/../lib/mock-env.sh"
+source "$SCRIPT_DIR/../lib/validation-engine.sh"
 
 # Test setup
 setup_mode2_tests() {
@@ -434,12 +434,113 @@ test_mode2_component_selection() {
     teardown_mode2_tests
 }
 
+# Test Mode 2 with external WordPress paths
+test_mode2_external_wordpress_paths() {
+    echo "Testing Mode 2 with external WordPress paths..."
+    
+    # Create test environment with external WordPress directory
+    local external_test_env
+    external_test_env=$(create_mock_env "mode2_external_test")
+    
+    # Create project structure with custom WordPress directory
+    mkdir -p "$external_test_env/site-wordpress/wp-content"/{plugins,themes,mu-plugins}
+    mkdir -p "$external_test_env/config" "$external_test_env/scripts"
+    
+    cd "$external_test_env"
+    
+    # Copy main script and create templates
+    cp "$SCRIPT_DIR/../../../init-project.sh" .
+    create_test_templates
+    
+    # Create sample components in external WordPress directory
+    mkdir -p "site-wordpress/wp-content/plugins/external-config-plugin"
+    cat > "site-wordpress/wp-content/plugins/external-config-plugin/plugin.php" << 'EOF'
+<?php
+/**
+ * Plugin Name: External Config Plugin
+ * Description: Plugin for external WordPress path testing
+ */
+class ExternalConfigPlugin{
+public function __construct(){
+add_action('init',array($this,'init'));
+}
+public function init(){
+// Plugin initialization
+}
+}
+new ExternalConfigPlugin();
+EOF
+    
+    # Test external WordPress path setup for Mode 2
+    local wp_path="$external_test_env/site-wordpress"
+    local project_root="$external_test_env"
+    
+    export WORDPRESS_PATH="$wp_path"
+    export PROJECT_ROOT="$project_root"
+    export PROJECT_SLUG="external-config-project"
+    export SELECTED_PLUGINS=("external-config-plugin")
+    export SELECTED_THEMES=()
+    export SELECTED_MU_PLUGINS=()
+    
+    # Test validation with external paths
+    init_validation_engine "CONFIGURE"
+    
+    if validate_external_wordpress_structure "CONFIGURE" "$wp_path"; then
+        print_assertion "PASS" "Should validate external WordPress structure for Mode 2"
+    else
+        print_assertion "FAIL" "Should validate external WordPress structure for Mode 2"
+    fi
+    
+    if validate_project_root_calculation "CONFIGURE" "$wp_path" "$project_root"; then
+        print_assertion "PASS" "Should calculate project root correctly for Mode 2"
+    else
+        print_assertion "FAIL" "Should calculate project root correctly for Mode 2"
+    fi
+    
+    # Test component validation with external paths
+    local selected_plugins=("${SELECTED_PLUGINS[@]}")
+    if validate_component_directories "CONFIGURE" "plugins" selected_plugins; then
+        print_assertion "PASS" "Should validate external plugin directories for Mode 2"
+    else
+        print_assertion "FAIL" "Should validate external plugin directories for Mode 2"
+    fi
+    
+    # Test that configuration files are created in project root, not WordPress directory
+    local package_content
+    package_content=$(sed "s/{{PROJECT_SLUG}}/$PROJECT_SLUG/g" package.json.template)
+    echo "$package_content" > package.json
+    
+    if [ -f "package.json" ] && [ ! -f "site-wordpress/package.json" ]; then
+        print_assertion "PASS" "Should create config files in project root, not WordPress directory"
+    else
+        print_assertion "FAIL" "Should create config files in project root, not WordPress directory"
+    fi
+    
+    # Test that original formatting is preserved (Mode 2 characteristic)
+    if grep -q "class ExternalConfigPlugin{" site-wordpress/wp-content/plugins/external-config-plugin/plugin.php; then
+        print_assertion "PASS" "Should preserve original formatting in external WordPress files"
+    else
+        print_assertion "FAIL" "Should preserve original formatting in external WordPress files"
+    fi
+    
+    # Test that project structure is preserved
+    if [ -d "config" ] && [ -d "scripts" ]; then
+        print_assertion "PASS" "Should preserve existing project structure"
+    else
+        print_assertion "FAIL" "Should preserve existing project structure"
+    fi
+    
+    cd - > /dev/null
+    cleanup_mock_env "$external_test_env"
+}
+
 # Run all Mode 2 tests
 run_mode2_integration_tests() {
     echo "🧪 Running Mode 2 Integration Tests..."
     echo "====================================="
     
     test_mode2_basic_config
+    test_mode2_external_wordpress_paths
     test_mode2_without_formatting_tools
     test_mode2_with_existing_config
     test_mode2_missing_templates

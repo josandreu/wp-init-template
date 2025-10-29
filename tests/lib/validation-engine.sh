@@ -10,6 +10,23 @@
 # Source required dependencies
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Mock logging functions if not already defined
+if ! command -v log_info >/dev/null 2>&1; then
+    log_info() { echo "INFO: $1" >&2; }
+fi
+if ! command -v log_warning >/dev/null 2>&1; then
+    log_warning() { echo "WARNING: $1" >&2; }
+fi
+if ! command -v log_error >/dev/null 2>&1; then
+    log_error() { echo "ERROR: $1" >&2; }
+fi
+if ! command -v log_success >/dev/null 2>&1; then
+    log_success() { echo "SUCCESS: $1" >&2; }
+fi
+if ! command -v log_validation_result >/dev/null 2>&1; then
+    log_validation_result() { echo "VALIDATION: $1 - $2" >&2; }
+fi
+
 # Global validation state
 VALIDATION_ERRORS=0
 VALIDATION_WARNINGS=0
@@ -100,10 +117,17 @@ validation_can_continue() {
 # Context-Specific Validation Functions
 # ====================================================================
 
-# Validate WordPress structure
+# Validate WordPress structure - enhanced for external paths
 validate_wordpress_structure() {
     local context="$1"
+    local custom_path="${2:-}"
     
+    # If custom path is provided, validate it directly
+    if [ -n "$custom_path" ]; then
+        return validate_external_wordpress_structure "$context" "$custom_path"
+    fi
+    
+    # Use existing detection logic for backward compatibility
     if detect_wordpress_structure; then
         add_validation_result "wordpress_structure" "PASS" "$SEVERITY_INFO" \
             "WordPress structure detected: $WP_CONTENT_DIR" "" ""
@@ -114,6 +138,110 @@ validate_wordpress_structure() {
             "WordPress structure not found" "$solution" ""
         return 1
     fi
+}
+
+# Validate external WordPress structure at custom path
+validate_external_wordpress_structure() {
+    local context="$1"
+    local wp_path="$2"
+    
+    # Convert relative path to absolute path for validation
+    if [[ "$wp_path" != /* ]]; then
+        local original_path="$wp_path"
+        wp_path="$(cd "$(dirname "$wp_path")" 2>/dev/null && pwd)/$(basename "$wp_path")" || wp_path="$original_path"
+    fi
+    
+    # Verify that the directory exists
+    if [ ! -d "$wp_path" ]; then
+        local solution="Create WordPress directory: mkdir -p '$wp_path' OR verify path is correct"
+        add_validation_result "external_wordpress_path" "FAIL" "$SEVERITY_CRITICAL" \
+            "WordPress directory not found: $wp_path" "$solution" "$wp_path"
+        return 1
+    fi
+    
+    # Verify wp-content and subdirectories
+    if [ ! -d "$wp_path/wp-content" ]; then
+        local solution="Create wp-content structure: mkdir -p '$wp_path/wp-content/{plugins,themes,mu-plugins}'"
+        add_validation_result "external_wordpress_structure" "FAIL" "$SEVERITY_CRITICAL" \
+            "wp-content directory not found in: $wp_path" "$solution" "$wp_path/wp-content"
+        return 1
+    fi
+    
+    if [ ! -d "$wp_path/wp-content/plugins" ]; then
+        local solution="Create plugins directory: mkdir -p '$wp_path/wp-content/plugins'"
+        add_validation_result "external_wordpress_plugins" "FAIL" "$SEVERITY_CRITICAL" \
+            "plugins directory not found in: $wp_path/wp-content" "$solution" "$wp_path/wp-content/plugins"
+        return 1
+    fi
+    
+    if [ ! -d "$wp_path/wp-content/themes" ]; then
+        local solution="Create themes directory: mkdir -p '$wp_path/wp-content/themes'"
+        add_validation_result "external_wordpress_themes" "FAIL" "$SEVERITY_CRITICAL" \
+            "themes directory not found in: $wp_path/wp-content" "$solution" "$wp_path/wp-content/themes"
+        return 1
+    fi
+    
+    # Create mu-plugins directory if it doesn't exist (non-critical)
+    if [ ! -d "$wp_path/wp-content/mu-plugins" ]; then
+        if mkdir -p "$wp_path/wp-content/mu-plugins" 2>/dev/null; then
+            add_validation_result "external_wordpress_mu_plugins" "PASS" "$SEVERITY_INFO" \
+                "mu-plugins directory created: $wp_path/wp-content/mu-plugins" "" "$wp_path/wp-content/mu-plugins"
+        else
+            local solution="Create mu-plugins directory: mkdir -p '$wp_path/wp-content/mu-plugins'"
+            add_validation_result "external_wordpress_mu_plugins" "WARN" "$SEVERITY_WARNING" \
+                "mu-plugins directory could not be created: $wp_path/wp-content/mu-plugins" "$solution" "$wp_path/wp-content/mu-plugins"
+        fi
+    fi
+    
+    add_validation_result "external_wordpress_structure" "PASS" "$SEVERITY_INFO" \
+        "External WordPress structure validated: $wp_path" "" "$wp_path"
+    return 0
+}
+
+# Validate project root calculation from WordPress path
+validate_project_root_calculation() {
+    local context="$1"
+    local wp_path="$2"
+    local expected_root="${3:-}"
+    
+    # Calculate project root as parent directory of WordPress path
+    local calculated_root
+    calculated_root="$(dirname "$wp_path")"
+    
+    # Verify calculated root is a valid directory
+    if [ ! -d "$calculated_root" ]; then
+        local solution="Verify WordPress path is correct: '$wp_path' should be inside a valid project directory"
+        add_validation_result "project_root_calculation" "FAIL" "$SEVERITY_CRITICAL" \
+            "Calculated project root is not a valid directory: $calculated_root" "$solution" "$calculated_root"
+        return 1
+    fi
+    
+    # Verify calculated root is writable
+    if [ ! -w "$calculated_root" ]; then
+        local solution="Fix permissions: chmod 755 '$calculated_root' OR run with appropriate permissions"
+        add_validation_result "project_root_permissions" "FAIL" "$SEVERITY_CRITICAL" \
+            "Project root is not writable: $calculated_root" "$solution" "$calculated_root"
+        return 1
+    fi
+    
+    # If expected root is provided, validate it matches
+    if [ -n "$expected_root" ]; then
+        local expected_abs
+        expected_abs="$(cd "$expected_root" 2>/dev/null && pwd)" || expected_abs="$expected_root"
+        local calculated_abs
+        calculated_abs="$(cd "$calculated_root" 2>/dev/null && pwd)" || calculated_abs="$calculated_root"
+        
+        if [ "$expected_abs" != "$calculated_abs" ]; then
+            local solution="Verify WordPress path: expected project root '$expected_root', calculated '$calculated_root'"
+            add_validation_result "project_root_mismatch" "FAIL" "$SEVERITY_CRITICAL" \
+                "Project root mismatch: expected '$expected_root', calculated '$calculated_root'" "$solution" "$calculated_root"
+            return 1
+        fi
+    fi
+    
+    add_validation_result "project_root_calculation" "PASS" "$SEVERITY_INFO" \
+        "Project root calculation validated: $calculated_root" "" "$calculated_root"
+    return 0
 }
 
 # Validate write permissions
@@ -171,12 +299,23 @@ validate_disk_space() {
 validate_component_directories() {
     local context="$1"
     local component_type="$2"  # plugins|themes|mu-plugins
-    local -n components_ref=$3  # Array reference
+    local components_array_name="$3"  # Array name as string
     
     local errors=0
-    local component_dir="$WP_CONTENT_DIR/$component_type"
+    local component_dir
     
-    for component in "${components_ref[@]}"; do
+    # Use external WordPress path if available, otherwise use legacy WP_CONTENT_DIR
+    if [ -n "$WORDPRESS_PATH" ]; then
+        component_dir="$WORDPRESS_PATH/wp-content/$component_type"
+    else
+        component_dir="$WP_CONTENT_DIR/$component_type"
+    fi
+    
+    # Get array contents using eval (compatible with bash 3.2)
+    local components_list
+    eval "components_list=(\"\${${components_array_name}[@]}\")"
+    
+    for component in "${components_list[@]}"; do
         local component_path="$component_dir/$component"
         
         if [ -d "$component_path" ]; then
@@ -330,9 +469,17 @@ validate_configure_context() {
     
     init_validation_engine "$CONTEXT_CONFIGURE"
     
-    # Core validations
-    validate_wordpress_structure "$CONTEXT_CONFIGURE"
-    validate_write_permissions "$CONTEXT_CONFIGURE"
+    # Core validations - enhanced for external WordPress paths
+    if [ -n "$WORDPRESS_PATH" ]; then
+        # External WordPress path validation
+        validate_external_wordpress_structure "$CONTEXT_CONFIGURE" "$WORDPRESS_PATH"
+        validate_project_root_calculation "$CONTEXT_CONFIGURE" "$WORDPRESS_PATH" "$PROJECT_ROOT"
+        validate_write_permissions "$CONTEXT_CONFIGURE" "$PROJECT_ROOT"
+    else
+        # Legacy validation for backward compatibility
+        validate_wordpress_structure "$CONTEXT_CONFIGURE"
+        validate_write_permissions "$CONTEXT_CONFIGURE"
+    fi
     
     # Calculate required disk space based on components
     local total_components=$((${#selected_plugins[@]} + ${#selected_themes[@]} + ${#selected_mu_plugins[@]}))
@@ -341,13 +488,13 @@ validate_configure_context() {
     
     # Component validations
     if [ ${#selected_plugins[@]} -gt 0 ]; then
-        validate_component_directories "$CONTEXT_CONFIGURE" "plugins" selected_plugins
+        validate_component_directories "$CONTEXT_CONFIGURE" "plugins" "selected_plugins"
     fi
     if [ ${#selected_themes[@]} -gt 0 ]; then
-        validate_component_directories "$CONTEXT_CONFIGURE" "themes" selected_themes
+        validate_component_directories "$CONTEXT_CONFIGURE" "themes" "selected_themes"
     fi
     if [ ${#selected_mu_plugins[@]} -gt 0 ]; then
-        validate_component_directories "$CONTEXT_CONFIGURE" "mu-plugins" selected_mu_plugins
+        validate_component_directories "$CONTEXT_CONFIGURE" "mu-plugins" "selected_mu_plugins"
     fi
     
     # Tool validations (optional for configure)
@@ -388,20 +535,28 @@ validate_format_context() {
     
     init_validation_engine "$CONTEXT_FORMAT"
     
-    # Core validations
-    validate_wordpress_structure "$CONTEXT_FORMAT"
-    validate_write_permissions "$CONTEXT_FORMAT"
+    # Core validations - enhanced for external WordPress paths
+    if [ -n "$WORDPRESS_PATH" ]; then
+        # External WordPress path validation
+        validate_external_wordpress_structure "$CONTEXT_FORMAT" "$WORDPRESS_PATH"
+        validate_project_root_calculation "$CONTEXT_FORMAT" "$WORDPRESS_PATH" "$PROJECT_ROOT"
+        validate_write_permissions "$CONTEXT_FORMAT" "$PROJECT_ROOT"
+    else
+        # Legacy validation for backward compatibility
+        validate_wordpress_structure "$CONTEXT_FORMAT"
+        validate_write_permissions "$CONTEXT_FORMAT"
+    fi
     validate_disk_space "$CONTEXT_FORMAT" 70  # Less space needed for formatting
     
     # Component validations
     if [ ${#selected_plugins[@]} -gt 0 ]; then
-        validate_component_directories "$CONTEXT_FORMAT" "plugins" selected_plugins
+        validate_component_directories "$CONTEXT_FORMAT" "plugins" "selected_plugins"
     fi
     if [ ${#selected_themes[@]} -gt 0 ]; then
-        validate_component_directories "$CONTEXT_FORMAT" "themes" selected_themes
+        validate_component_directories "$CONTEXT_FORMAT" "themes" "selected_themes"
     fi
     if [ ${#selected_mu_plugins[@]} -gt 0 ]; then
-        validate_component_directories "$CONTEXT_FORMAT" "mu-plugins" selected_mu_plugins
+        validate_component_directories "$CONTEXT_FORMAT" "mu-plugins" "selected_mu_plugins"
     fi
     
     # Check for existing formatting tools (optional)
@@ -411,11 +566,21 @@ validate_format_context() {
     local has_php_files=false
     for component_type in "plugins" "themes" "mu-plugins"; do
         local component_array_name="selected_${component_type}"
-        local -n components_ref=$component_array_name
         
-        for component in "${components_ref[@]}"; do
-            if [ -d "$WP_CONTENT_DIR/$component_type/$component" ] && \
-               find "$WP_CONTENT_DIR/$component_type/$component" -name "*.php" -type f | head -1 | grep -q .; then
+        # Get array contents using eval (compatible with bash 3.2)
+        local components_list
+        eval "components_list=(\"\${${component_array_name}[@]}\")"
+        
+        for component in "${components_list[@]}"; do
+            local component_path
+            if [ -n "$WORDPRESS_PATH" ]; then
+                component_path="$WORDPRESS_PATH/wp-content/$component_type/$component"
+            else
+                component_path="$WP_CONTENT_DIR/$component_type/$component"
+            fi
+            
+            if [ -d "$component_path" ] && \
+               find "$component_path" -name "*.php" -type f | head -1 | grep -q .; then
                 has_php_files=true
                 break 2
             fi
@@ -437,11 +602,21 @@ validate_format_context() {
     local has_js_files=false
     for component_type in "plugins" "themes" "mu-plugins"; do
         local component_array_name="selected_${component_type}"
-        local -n components_ref=$component_array_name
         
-        for component in "${components_ref[@]}"; do
-            if [ -d "$WP_CONTENT_DIR/$component_type/$component" ] && \
-               find "$WP_CONTENT_DIR/$component_type/$component" \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \) -type f | head -1 | grep -q .; then
+        # Get array contents using eval (compatible with bash 3.2)
+        local components_list
+        eval "components_list=(\"\${${component_array_name}[@]}\")"
+        
+        for component in "${components_list[@]}"; do
+            local component_path
+            if [ -n "$WORDPRESS_PATH" ]; then
+                component_path="$WORDPRESS_PATH/wp-content/$component_type/$component"
+            else
+                component_path="$WP_CONTENT_DIR/$component_type/$component"
+            fi
+            
+            if [ -d "$component_path" ] && \
+               find "$component_path" \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \) -type f | head -1 | grep -q .; then
                 has_js_files=true
                 break 2
             fi
@@ -466,9 +641,17 @@ validate_format_context() {
 validate_merge_context() {
     init_validation_engine "$CONTEXT_MERGE"
     
-    # Core validations
-    validate_wordpress_structure "$CONTEXT_MERGE"
-    validate_write_permissions "$CONTEXT_MERGE"
+    # Core validations - enhanced for external WordPress paths
+    if [ -n "$WORDPRESS_PATH" ]; then
+        # External WordPress path validation
+        validate_external_wordpress_structure "$CONTEXT_MERGE" "$WORDPRESS_PATH"
+        validate_project_root_calculation "$CONTEXT_MERGE" "$WORDPRESS_PATH" "$PROJECT_ROOT"
+        validate_write_permissions "$CONTEXT_MERGE" "$PROJECT_ROOT"
+    else
+        # Legacy validation for backward compatibility
+        validate_wordpress_structure "$CONTEXT_MERGE"
+        validate_write_permissions "$CONTEXT_MERGE"
+    fi
     validate_disk_space "$CONTEXT_MERGE" 100  # More space needed for backups
     
     # jq is required for merge operations

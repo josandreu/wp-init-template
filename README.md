@@ -150,28 +150,27 @@ make dev
 </td>
 <td width="50%">
 
-### 🔄 **Para Proyecto Existente**
+### 🔄 **Para Proyecto Existente (RECOMENDADO)**
 
 <div align="center">
 
-**🛠️ Integra estándares sin romper nada**
+**🛠️ Flujo externo seguro - Sin interferir con tu proyecto**
 
 </div>
 
 ```bash
-# 1. Clona la plantilla en una ubicación separada
-git clone https://github.com/tu-usuario/wp-init.git ~/plantillas/wp-init
+# 1. Clona la plantilla externamente
+git clone https://github.com/tu-usuario/wp-init.git /tmp/wp-init
 
-# 2. Navega a tu proyecto existente
+# 2. Ejecuta desde ubicación externa
+/tmp/wp-init/init-project.sh /ruta/a/tu/wordpress 1
+
+# 3. Instala nuevas dependencias
 cd /ruta/a/tu/proyecto
+npm install && composer install
 
-# 3. Ejecuta el script desde la plantilla
-~/plantillas/wp-init/init-project.sh
-# Selecciona: Modo 4 (Fusionar configuración)
-
-# 4. Instala nuevas dependencias
-npm install
-composer install
+# 4. ¡Listo para desarrollar!
+make dev
 ```
 
 <div align="center">
@@ -183,6 +182,198 @@ composer install
 </td>
 </tr>
 </table>
+
+---
+
+## 🌟 Nuevo: Flujo de Trabajo Externo
+
+<div align="center">
+
+### 🎯 **Flujo Recomendado para Proyectos Reales**
+
+*Ejecuta desde ubicación externa para máxima seguridad y compatibilidad*
+
+</div>
+
+<table>
+<tr>
+<td align="center" width="50%">
+
+### 🔴 **Flujo Anterior (Riesgoso)**
+*Clonar en raíz del proyecto*
+
+</td>
+<td align="center" width="50%">
+
+### 🟢 **Nuevo Flujo (Seguro)**
+*Ejecutar desde ubicación externa*
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+```bash
+# ❌ Flujo anterior (no recomendado)
+cd /ruta/a/mi/proyecto
+git clone wp-init .
+./init-project.sh
+
+# Problemas:
+# - Puede sobrescribir archivos
+# - Conflictos con .gitignore
+# - Interfiere con Docker/CI/CD
+# - Riesgo de perder configuración
+```
+
+</td>
+<td width="50%">
+
+```bash
+# ✅ Nuevo flujo (recomendado)
+git clone wp-init /tmp/wp-init
+/tmp/wp-init/init-project.sh /ruta/a/mi/wordpress
+
+# Ventajas:
+# ✅ No interfiere con archivos del proyecto
+# ✅ Preserva Docker/CI/CD existente
+# ✅ Funciona con cualquier estructura
+# ✅ Permite múltiples proyectos
+# ✅ Cero riesgo de conflictos
+```
+
+</td>
+</tr>
+</table>
+
+### 📋 Sintaxis del Flujo Externo
+
+```bash
+# Sintaxis completa
+/ruta/a/wp-init/init-project.sh [WORDPRESS_PATH] [MODE] [OPTIONS]
+
+# Ejemplos prácticos
+/tmp/wp-init/init-project.sh /Users/dev/mi-proyecto/wordpress 1
+/tmp/wp-init/init-project.sh ./mi-wordpress 2
+/tmp/wp-init/init-project.sh /var/www/cliente/wp --help
+```
+
+### 🏗️ Estructuras de Proyecto Compatibles
+
+<div align="center">
+
+**🎯 El script detecta automáticamente la estructura y se adapta**
+
+</div>
+
+<table>
+<tr>
+<th width="33%">🐳 **Con Docker**</th>
+<th width="33%">🔧 **Con CI/CD**</th>
+<th width="33%">📁 **Estructura Personalizada**</th>
+</tr>
+<tr>
+<td>
+
+```text
+mi-proyecto/
+├── docker/
+├── docker-compose.yml
+├── Jenkinsfile
+└── wordpress/          ← WordPress aquí
+    └── wp-content/
+```
+
+**Comando:**
+```bash
+/tmp/wp-init/init-project.sh \
+  /path/to/mi-proyecto/wordpress 1
+```
+
+</td>
+<td>
+
+```text
+cliente-web/
+├── .gitlab-ci.yml
+├── README.md
+├── docs/
+└── wp/                 ← WordPress aquí
+    └── wp-content/
+```
+
+**Comando:**
+```bash
+/tmp/wp-init/init-project.sh \
+  /path/to/cliente-web/wp 2
+```
+
+</td>
+<td>
+
+```text
+sitio-complejo/
+├── backend/
+├── frontend/
+├── config/
+└── cms-wordpress/      ← WordPress aquí
+    └── wp-content/
+```
+
+**Comando:**
+```bash
+/tmp/wp-init/init-project.sh \
+  /path/to/sitio-complejo/cms-wordpress
+```
+
+</td>
+</tr>
+</table>
+
+### 🔍 Detección Automática de Estructura
+
+El script incluye validación y confirmación automática:
+
+```bash
+══════════════════════════════════════════════════════════════
+  📋 Resumen de Estructura Detectada
+══════════════════════════════════════════════════════════════
+
+✅ Estructura WordPress válida detectada
+
+📁 Rutas del proyecto:
+  • Raíz del proyecto: /Users/dev/mi-proyecto
+  • Directorio WordPress: /Users/dev/mi-proyecto/wordpress
+  • Ruta relativa: wordpress
+
+📂 Estructura WordPress encontrada:
+  • wp-content: ✓ /Users/dev/mi-proyecto/wordpress/wp-content
+  • plugins: ✓ (3 directorios)
+  • themes: ✓ (2 directorios)
+  • mu-plugins: ⚠ (será creado automáticamente)
+
+📄 Archivos del proyecto existentes:
+  • ✓ composer.json (será preservado)
+  • ✓ package.json (será preservado)
+  • ✓ docker-compose.yml (será preservado)
+  • ✓ Jenkinsfile (será preservado)
+
+🔐 Permisos de escritura:
+  • Raíz del proyecto: ✓ Escribible
+  • Directorio WordPress: ✓ Escribible
+
+══════════════════════════════════════════════════════════════
+  ✅ Confirmación de Configuración
+══════════════════════════════════════════════════════════════
+
+¿La configuración detectada es correcta?
+
+  Raíz del proyecto: /Users/dev/mi-proyecto
+  WordPress: /Users/dev/mi-proyecto/wordpress
+  Ruta relativa: wordpress
+
+¿Continuar con esta configuración? (y/n): y
+```
 
 ---
 
@@ -4680,25 +4871,31 @@ Este proyecto está bajo licencia **GPL-2.0-or-later**, compatible con WordPress
 
 <table>
 <tr>
-<td align="center" width="25%">
+<td align="center" width="20%">
+
+### 🌐 **Flujo Externo**
+Nuevas funcionalidades
+
+</td>
+<td align="center" width="20%">
 
 ### 🔍 **Validación**
 Errores de estructura
 
 </td>
-<td align="center" width="25%">
+<td align="center" width="20%">
 
 ### 📁 **Archivos**
 Problemas de operaciones
 
 </td>
-<td align="center" width="25%">
+<td align="center" width="20%">
 
 ### 🧩 **Componentes**
 Selección y detección
 
 </td>
-<td align="center" width="25%">
+<td align="center" width="20%">
 
 ### ⚙️ **Sistema**
 Herramientas y permisos
@@ -4706,6 +4903,181 @@ Herramientas y permisos
 </td>
 </tr>
 </table>
+
+---
+
+### 🌐 Problemas del Flujo Externo
+
+#### ❌ Error: "Failed to configure WordPress path"
+
+<div align="center">
+
+**🔍 Problema**: El script no puede validar la ruta de WordPress proporcionada.
+
+</div>
+
+<details>
+<summary><strong>🛠️ Solución paso a paso (click para expandir)</strong></summary>
+
+```bash
+# 1. Verificar que la ruta existe y es correcta
+ls -la /ruta/a/tu/wordpress
+# Debe mostrar wp-content/
+
+# 2. Verificar estructura WordPress completa
+ls -la /ruta/a/tu/wordpress/wp-content/
+# Debe mostrar: plugins/, themes/, (mu-plugins/ opcional)
+
+# 3. Si falta algún directorio, crearlo
+mkdir -p /ruta/a/tu/wordpress/wp-content/{plugins,themes,mu-plugins}
+
+# 4. Usar ruta absoluta en lugar de relativa
+/tmp/wp-init/init-project.sh /Users/usuario/Sites/proyecto/wordpress 1
+
+# 5. Verificar permisos de escritura
+ls -ld /ruta/a/tu/proyecto
+# Debe mostrar permisos de escritura (w)
+```
+
+</details>
+
+**💡 Consejos adicionales:**
+- Usa rutas absolutas para evitar confusión
+- Verifica que el directorio padre (raíz del proyecto) sea escribible
+- El directorio WordPress debe contener wp-content/ con subdirectorios
+
+---
+
+#### ❌ Error: "Project root directory is not writable"
+
+**🔍 Problema**: El script no puede escribir en el directorio raíz del proyecto.
+
+```bash
+# 1. Verificar permisos actuales
+ls -ld /ruta/a/tu/proyecto
+# Ejemplo salida: drwxr-xr-x (sin permisos de escritura)
+
+# 2. Cambiar permisos del directorio
+chmod 755 /ruta/a/tu/proyecto
+
+# 3. Verificar que el cambio funcionó
+ls -ld /ruta/a/tu/proyecto
+# Debe mostrar: drwxr-xr-x (con permisos de escritura)
+
+# 4. Si sigues sin permisos, verificar propietario
+ls -la /ruta/a/tu/proyecto
+whoami
+
+# 5. Si no eres el propietario, cambiar propietario (con cuidado)
+sudo chown -R $(whoami):$(whoami) /ruta/a/tu/proyecto
+```
+
+---
+
+#### ❌ Error: "Configuration rejected by user"
+
+**🔍 Problema**: Rechazaste la configuración detectada automáticamente.
+
+```bash
+# El script detectó una configuración que no es correcta
+# Opciones para solucionarlo:
+
+# 1. Verificar que especificaste la ruta correcta
+/tmp/wp-init/init-project.sh /ruta/correcta/a/wordpress 1
+
+# 2. Si la estructura es diferente, usar --help para ver ejemplos
+/tmp/wp-init/init-project.sh --help
+
+# 3. Verificar estructura esperada vs actual
+echo "Estructura esperada:"
+echo "  /ruta/proyecto/wordpress/wp-content/"
+echo ""
+echo "Tu estructura actual:"
+find /ruta/a/tu/proyecto -name "wp-content" -type d
+```
+
+---
+
+#### ❌ Error: "Invalid WordPress path. Please try again."
+
+**🔍 Problema**: La ruta proporcionada no contiene una instalación WordPress válida.
+
+```bash
+# 1. Verificar que apuntas al directorio correcto
+# ✅ Correcto: /proyecto/wordpress (contiene wp-content/)
+# ❌ Incorrecto: /proyecto/wordpress/wp-content (es el subdirectorio)
+
+# 2. Verificar contenido del directorio
+ls -la /ruta/especificada/
+# Debe contener wp-content/ directamente
+
+# 3. Si wp-content está en otro lugar, ajustar ruta
+find /ruta/a/tu/proyecto -name "wp-content" -type d
+# Usar el directorio padre de wp-content
+
+# 4. Ejemplo de estructura correcta
+/proyecto/
+├── docker/
+├── wordpress/          ← Usar esta ruta
+│   └── wp-content/     ← No esta
+└── README.md
+```
+
+---
+
+#### 🔧 Uso de Parámetros CLI
+
+**Sintaxis completa con ejemplos:**
+
+```bash
+# Ayuda completa
+/tmp/wp-init/init-project.sh --help
+
+# Versión del script
+/tmp/wp-init/init-project.sh --version
+
+# Modo no interactivo (automático)
+/tmp/wp-init/init-project.sh /ruta/wordpress 1
+
+# Diferentes modos
+/tmp/wp-init/init-project.sh /ruta/wordpress 1  # Configurar y formatear
+/tmp/wp-init/init-project.sh /ruta/wordpress 2  # Solo configurar
+/tmp/wp-init/init-project.sh /ruta/wordpress 3  # Solo formatear
+/tmp/wp-init/init-project.sh /ruta/wordpress 4  # Fusionar (requiere jq)
+
+# Ejemplos con estructuras reales
+/tmp/wp-init/init-project.sh /Users/dev/cliente/wordpress 1
+/tmp/wp-init/init-project.sh ./mi-proyecto-wp 2
+/tmp/wp-init/init-project.sh /var/www/sitio/wp 4
+```
+
+---
+
+#### 🏗️ Compatibilidad con Estructuras Existentes
+
+**El script preserva automáticamente:**
+
+```bash
+# ✅ Archivos que se preservan automáticamente
+docker-compose.yml      # Configuración Docker
+Jenkinsfile            # Pipeline Jenkins
+.gitlab-ci.yml         # Pipeline GitLab
+.github/               # GitHub Actions
+Dockerfile             # Configuración Docker
+.env                   # Variables de entorno
+README.md              # Documentación existente
+docs/                  # Documentación del proyecto
+
+# ✅ Archivos que se fusionan inteligentemente (Modo 4)
+package.json           # Dependencias NPM preservadas
+composer.json          # Dependencias PHP preservadas
+
+# ✅ Archivos que se crean/actualizan
+phpcs.xml.dist         # Configuración PHP Standards
+eslint.config.js       # Configuración JavaScript
+wp.code-workspace      # Workspace VSCode
+.vscode/settings.json  # Configuración VSCode
+```
 
 ---
 

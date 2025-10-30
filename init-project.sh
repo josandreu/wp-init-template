@@ -3196,15 +3196,15 @@ generate_project_files() {
     # Build template files array dynamically based on what exists
     local template_files=()
     
-    # Always try to process .gitignore.template (required)
-    template_files+=(".gitignore.template:.gitignore")
+    # Always try to process .gitignore.template (required) - use SCRIPT_DIR to find template
+    template_files+=("$SCRIPT_DIR/.gitignore.template:.gitignore")
     
-    # Add optional templates only if they exist
-    [ -f "bitbucket-pipelines.yml.template" ] && template_files+=("bitbucket-pipelines.yml.template:bitbucket-pipelines.yml")
-    [ -f "commitlint.config.cjs.template" ] && template_files+=("commitlint.config.cjs.template:commitlint.config.cjs")
-    [ -f "lighthouserc.js.template" ] && template_files+=("lighthouserc.js.template:lighthouserc.js")
-    [ -f "Makefile.template" ] && template_files+=("Makefile.template:Makefile")
-    [ -f "verify-template.sh" ] && template_files+=("verify-template.sh:verify-project.sh")
+    # Add optional templates only if they exist - use SCRIPT_DIR to find templates
+    [ -f "$SCRIPT_DIR/bitbucket-pipelines.yml.template" ] && template_files+=("$SCRIPT_DIR/bitbucket-pipelines.yml.template:bitbucket-pipelines.yml")
+    [ -f "$SCRIPT_DIR/commitlint.config.cjs.template" ] && template_files+=("$SCRIPT_DIR/commitlint.config.cjs.template:commitlint.config.cjs")
+    [ -f "$SCRIPT_DIR/lighthouserc.js.template" ] && template_files+=("$SCRIPT_DIR/lighthouserc.js.template:lighthouserc.js")
+    [ -f "$SCRIPT_DIR/Makefile.template" ] && template_files+=("$SCRIPT_DIR/Makefile.template:Makefile")
+    [ -f "$SCRIPT_DIR/verify-template.sh" ] && template_files+=("$SCRIPT_DIR/verify-template.sh:verify-project.sh")
     
     print_info "Generating project files from templates..."
     log_info "Starting template file generation process"

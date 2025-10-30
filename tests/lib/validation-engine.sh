@@ -514,9 +514,9 @@ validate_configure_context() {
         fi
     done
     
-    # Template validations
-    local required_templates=(".gitignore.template")
-    local optional_templates=("bitbucket-pipelines.yml.template" "commitlint.config.cjs.template" "lighthouserc.js.template" "Makefile.template")
+    # Template validations - use SCRIPT_DIR to find templates relative to the script location
+    local required_templates=("$SCRIPT_DIR/../.gitignore.template")
+    local optional_templates=("$SCRIPT_DIR/../bitbucket-pipelines.yml.template" "$SCRIPT_DIR/../commitlint.config.cjs.template" "$SCRIPT_DIR/../lighthouserc.js.template" "$SCRIPT_DIR/../Makefile.template")
     
     validate_template_files "$CONTEXT_CONFIGURE" "${required_templates[@]}"
     validate_optional_template_files "$CONTEXT_CONFIGURE" "${optional_templates[@]}"
@@ -688,13 +688,13 @@ validate_template_context() {
     validate_write_permissions "$CONTEXT_TEMPLATE"
     validate_disk_space "$CONTEXT_TEMPLATE" 30  # Minimal space for templates
     
-    # All template files validation
+    # All template files validation - use SCRIPT_DIR to find templates relative to the script location
     local all_templates=(
-        ".gitignore.template"
-        "bitbucket-pipelines.yml.template"
-        "commitlint.config.cjs.template"
-        "lighthouserc.js.template"
-        "Makefile.template"
+        "$SCRIPT_DIR/../.gitignore.template"
+        "$SCRIPT_DIR/../bitbucket-pipelines.yml.template"
+        "$SCRIPT_DIR/../commitlint.config.cjs.template"
+        "$SCRIPT_DIR/../lighthouserc.js.template"
+        "$SCRIPT_DIR/../Makefile.template"
     )
     
     validate_template_files "$CONTEXT_TEMPLATE" "${all_templates[@]}"

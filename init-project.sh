@@ -3919,7 +3919,9 @@ PHPSTAN_EOF
         ESLINT_FILES+="      '${WP_CONTENT_DIR}/themes/${t}/**/*.{js,jsx,ts,tsx}',\n"
     done
     
-    local eslint_content="import js from '@eslint/js';
+    # Create eslint.config.js directly
+    cat > eslint.config.js << 'ESLINT_EOF'
+import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
@@ -3934,7 +3936,11 @@ export default [
       globals: { ...globals.browser, ...globals.node, wp: 'readonly', jQuery: 'readonly', $: 'readonly', __: 'readonly' },
     },
     files: [
-$(echo -e "$ESLINT_FILES" | sed '$ s/,$//')
+ESLINT_EOF
+    if [ -n "$ESLINT_FILES" ]; then
+        echo -e "$ESLINT_FILES" | sed '$ s/,$//' >> eslint.config.js
+    fi
+    cat >> eslint.config.js << 'ESLINT_EOF2'
     ],
     rules: {
       'array-bracket-spacing': ['error', 'always'],
@@ -3958,78 +3964,80 @@ $(echo -e "$ESLINT_FILES" | sed '$ s/,$//')
       'no-var': 'error',
     },
   },
-];"
+];
+ESLINT_EOF2
     
-    # Use mode-specific file operation
-    if perform_mode_specific_file_operation "$eslint_content" "eslint.config.js" "write"; then
+    if [ -f "eslint.config.js" ]; then
         print_success "eslint.config.js generado"
     else
         print_error "Error generando eslint.config.js"
     fi
     
-    # Handle package.json using mode-specific operations
+    # Handle package.json
     print_info "Procesando package.json..."
-    local package_content="{
-  \"name\": \"${PROJECT_SLUG}\",
-  \"version\": \"1.0.0\",
-  \"description\": \"WordPress project with coding standards\",
-  \"type\": \"module\",
-  \"scripts\": {
-    \"lint:js\": \"eslint '**/*.{js,jsx,ts,tsx}'\",
-    \"lint:js:fix\": \"eslint --fix '**/*.{js,jsx,ts,tsx}'\",
-    \"lint:php\": \"./vendor/bin/phpcs --standard=phpcs.xml.dist\",
-    \"lint:php:fix\": \"./vendor/bin/phpcbf --standard=phpcs.xml.dist\",
-    \"lint\": \"npm run lint:js && npm run lint:php\",
-    \"format\": \"npm run lint:js:fix && npm run lint:php:fix\"
+    cat > package.json << PACKAGE_EOF
+{
+  "name": "${PROJECT_SLUG}",
+  "version": "1.0.0",
+  "description": "WordPress project with coding standards",
+  "type": "module",
+  "scripts": {
+    "lint:js": "eslint '**/*.{js,jsx,ts,tsx}'",
+    "lint:js:fix": "eslint --fix '**/*.{js,jsx,ts,tsx}'",
+    "lint:php": "./vendor/bin/phpcs --standard=phpcs.xml.dist",
+    "lint:php:fix": "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
+    "lint": "npm run lint:js && npm run lint:php",
+    "format": "npm run lint:js:fix && npm run lint:php:fix"
   },
-  \"devDependencies\": {
-    \"@eslint/js\": \"^9.9.0\",
-    \"eslint\": \"^9.9.0\",
-    \"globals\": \"^15.9.0\"
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "eslint": "^9.9.0",
+    "globals": "^15.9.0"
   },
-  \"author\": \"\",
-  \"license\": \"MIT\"
-}"
+  "author": "",
+  "license": "MIT"
+}
+PACKAGE_EOF
     
-    # Use mode-specific file operation
-    if perform_mode_specific_file_operation "$package_content" "package.json" "write"; then
-        print_success "package.json procesado según modo $MODE"
+    if [ -f "package.json" ]; then
+        print_success "package.json generado"
     else
-        print_error "Error procesando package.json"
+        print_error "Error generando package.json"
     fi
     
-    # Handle composer.json using mode-specific operations
+    # Handle composer.json
     print_info "Procesando composer.json..."
-    local composer_content="{
-    \"name\": \"${PROJECT_SLUG}/wordpress\",
-    \"description\": \"WordPress project with coding standards\",
-    \"type\": \"project\",
-    \"require\": {
-        \"php\": \">=8.1\"
+    cat > composer.json << COMPOSER_EOF
+{
+    "name": "${PROJECT_SLUG}/wordpress",
+    "description": "WordPress project with coding standards",
+    "type": "project",
+    "require": {
+        "php": ">=8.1"
     },
-    \"require-dev\": {
-        \"dealerdirect/phpcodesniffer-composer-installer\": \"^1.0\",
-        \"phpcompatibility/php-compatibility\": \"^9.3\",
-        \"phpstan/phpstan\": \"^1.11\",
-        \"wp-coding-standards/wpcs\": \"^3.1\"
+    "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+        "phpcompatibility/php-compatibility": "^9.3",
+        "phpstan/phpstan": "^1.11",
+        "wp-coding-standards/wpcs": "^3.1"
     },
-    \"config\": {
-        \"allow-plugins\": {
-            \"dealerdirect/phpcodesniffer-composer-installer\": true
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
         }
     },
-    \"scripts\": {
-        \"lint\": \"phpcs --standard=phpcs.xml.dist\",
-        \"lint:fix\": \"phpcbf --standard=phpcs.xml.dist\",
-        \"analyze\": \"phpstan analyze\"
+    "scripts": {
+        "lint": "phpcs --standard=phpcs.xml.dist",
+        "lint:fix": "phpcbf --standard=phpcs.xml.dist",
+        "analyze": "phpstan analyze"
     }
-}"
+}
+COMPOSER_EOF
     
-    # Use mode-specific file operation
-    if perform_mode_specific_file_operation "$composer_content" "composer.json" "write"; then
-        print_success "composer.json procesado según modo $MODE"
+    if [ -f "composer.json" ]; then
+        print_success "composer.json generado"
     else
-        print_error "Error procesando composer.json"
+        print_error "Error generando composer.json"
     fi
     
     # Generar configuración de VSCode usando operaciones específicas por modo

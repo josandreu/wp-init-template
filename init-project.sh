@@ -1898,8 +1898,8 @@ safe_file_operation() {
                 log_info "Created directory: $target_dir"
             fi
             
-            # Write content to file
-            if echo "$content" > "$file"; then
+            # Write content to file using printf to handle special characters
+            if printf '%s' "$content" > "$file"; then
                 log_success "File written: $file"
                 COPIED_FILES+=("$file")
                 return 0
@@ -4073,44 +4073,6 @@ $(echo -e "$ESLINT_FILES" | sed '$ s/,$//')
     \"editor.rulers\": [120],
     \"editor.codeActionsOnSave\": {
       \"source.fixAll\": \"always\"
-    }
-  },
-{
-  "editor.rulers": [120],
-  "editor.tabSize": 4,
-  "editor.insertSpaces": false,
-  "editor.detectIndentation": false,
-  "editor.formatOnSave": true,
-  
-  // PHPCS configuration
-  "phpcs.enable": true,
-  "phpcs.standard": "./phpcs.xml.dist",
-  "phpcs.executablePath": "./vendor/bin/phpcs",
-  "phpcs.showSources": true,
-  "phpcs.showSniffSource": true,
-  
-  // PHPSAB configuration
-  "phpsab.snifferMode": "onType",
-  "phpsab.snifferShowSources": true,
-  
-  // ESLint configuration
-  "eslint.enable": true,
-  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
-  "eslint.workingDirectories": ["."],
-  
-  // Stylelint configuration
-  "stylelint.enable": true,
-  "stylelint.validate": ["css", "scss", "sass"],
-  
-  // PHP language settings
-  "[php]": {
-    "editor.defaultFormatter": "valeryanm.vscode-phpsab",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 4,
-    "editor.insertSpaces": false,
-    "editor.rulers": [120],
-    "editor.codeActionsOnSave": {
-      "source.fixAll": "always"
     }
   },
   

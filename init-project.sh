@@ -13,6 +13,9 @@ set -o pipefail
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; MAGENTA='\033[0;35m'; NC='\033[0m'
 
+# Get the directory where this script is located (for finding template files)
+INIT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Print functions are now defined in the Error Handling module below
 
 validate_slug() {
@@ -3196,15 +3199,15 @@ generate_project_files() {
     # Build template files array dynamically based on what exists
     local template_files=()
     
-    # Always try to process .gitignore.template (required) - use SCRIPT_DIR to find template
-    template_files+=("$SCRIPT_DIR/.gitignore.template:.gitignore")
+    # Always try to process .gitignore.template (required) - use INIT_SCRIPT_DIR to find template
+    template_files+=("$INIT_SCRIPT_DIR/.gitignore.template:.gitignore")
     
-    # Add optional templates only if they exist - use SCRIPT_DIR to find templates
-    [ -f "$SCRIPT_DIR/bitbucket-pipelines.yml.template" ] && template_files+=("$SCRIPT_DIR/bitbucket-pipelines.yml.template:bitbucket-pipelines.yml")
-    [ -f "$SCRIPT_DIR/commitlint.config.cjs.template" ] && template_files+=("$SCRIPT_DIR/commitlint.config.cjs.template:commitlint.config.cjs")
-    [ -f "$SCRIPT_DIR/lighthouserc.js.template" ] && template_files+=("$SCRIPT_DIR/lighthouserc.js.template:lighthouserc.js")
-    [ -f "$SCRIPT_DIR/Makefile.template" ] && template_files+=("$SCRIPT_DIR/Makefile.template:Makefile")
-    [ -f "$SCRIPT_DIR/verify-template.sh" ] && template_files+=("$SCRIPT_DIR/verify-template.sh:verify-project.sh")
+    # Add optional templates only if they exist - use INIT_SCRIPT_DIR to find templates
+    [ -f "$INIT_SCRIPT_DIR/bitbucket-pipelines.yml.template" ] && template_files+=("$INIT_SCRIPT_DIR/bitbucket-pipelines.yml.template:bitbucket-pipelines.yml")
+    [ -f "$INIT_SCRIPT_DIR/commitlint.config.cjs.template" ] && template_files+=("$INIT_SCRIPT_DIR/commitlint.config.cjs.template:commitlint.config.cjs")
+    [ -f "$INIT_SCRIPT_DIR/lighthouserc.js.template" ] && template_files+=("$INIT_SCRIPT_DIR/lighthouserc.js.template:lighthouserc.js")
+    [ -f "$INIT_SCRIPT_DIR/Makefile.template" ] && template_files+=("$INIT_SCRIPT_DIR/Makefile.template:Makefile")
+    [ -f "$INIT_SCRIPT_DIR/verify-template.sh" ] && template_files+=("$INIT_SCRIPT_DIR/verify-template.sh:verify-project.sh")
     
     print_info "Generating project files from templates..."
     log_info "Starting template file generation process"

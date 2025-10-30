@@ -3805,36 +3805,47 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     
     # phpcs.xml.dist
     print_info "Generando phpcs.xml.dist..."
-    local phpcs_content="<?xml version=\"1.0\"?>
-<ruleset name=\"WordPress Project PHP Standards\">
+    
+    # Create phpcs.xml.dist directly with cat heredoc
+    cat > phpcs.xml.dist << 'PHPCS_EOF'
+<?xml version="1.0"?>
+<ruleset name="WordPress Project PHP Standards">
     <description>PHP CodeSniffer rules for WordPress project</description>
 
-    <rule ref=\"WordPress\">
-        <exclude name=\"WordPress.Files.FileName.InvalidClassFileName\"/>
-        <exclude name=\"WordPress.Files.FileName.NotHyphenatedLowercase\"/>
-        <exclude name=\"Squiz.Commenting.InlineComment.InvalidEndChar\"/>
-        <exclude name=\"Squiz.Commenting.FunctionComment.Missing\"/>
-        <exclude name=\"Squiz.Commenting.FileComment.Missing\"/>
-        <exclude name=\"Squiz.Commenting.ClassComment.Missing\"/>
-        <exclude name=\"Squiz.Commenting.VariableComment.Missing\"/>
+    <rule ref="WordPress">
+        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+        <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+        <exclude name="Squiz.Commenting.FunctionComment.Missing"/>
+        <exclude name="Squiz.Commenting.FileComment.Missing"/>
+        <exclude name="Squiz.Commenting.ClassComment.Missing"/>
+        <exclude name="Squiz.Commenting.VariableComment.Missing"/>
     </rule>
 
-    <rule ref=\"WordPress.NamingConventions.PrefixAllGlobals\">
+    <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
         <properties>
-            <property name=\"prefixes\" type=\"array\">
-$(echo -e "$PREFIXES")            </property>
+            <property name="prefixes" type="array">
+PHPCS_EOF
+    echo -e "$PREFIXES" >> phpcs.xml.dist
+    cat >> phpcs.xml.dist << 'PHPCS_EOF2'
+            </property>
         </properties>
     </rule>
 
-    <rule ref=\"WordPress.WP.I18n\">
+    <rule ref="WordPress.WP.I18n">
         <properties>
-            <property name=\"text_domain\" type=\"array\">
-$(echo -e "$TEXT_DOMAINS")            </property>
+            <property name="text_domain" type="array">
+PHPCS_EOF2
+    echo -e "$TEXT_DOMAINS" >> phpcs.xml.dist
+    cat >> phpcs.xml.dist << 'PHPCS_EOF3'
+            </property>
         </properties>
     </rule>
 
     <!-- Files to check -->
-$(echo -e "$FILES")
+PHPCS_EOF3
+    echo -e "$FILES" >> phpcs.xml.dist
+    cat >> phpcs.xml.dist << PHPCS_EOF4
     <!-- Exclude directories -->
     <exclude-pattern>*/node_modules/*</exclude-pattern>
     <exclude-pattern>*/build/*</exclude-pattern>
@@ -3844,15 +3855,15 @@ $(echo -e "$FILES")
     <exclude-pattern>${WP_CONTENT_DIR%/*}/wp-admin/*</exclude-pattern>
     <exclude-pattern>${WP_CONTENT_DIR%/*}/wp-includes/*</exclude-pattern>
 
-    <arg name=\"extensions\" value=\"php\"/>
-    <arg value=\"p\"/>
-    <arg value=\"s\"/>
-    <arg name=\"parallel\" value=\"8\"/>
-    <config name=\"ignore_warnings_on_exit\" value=\"1\"/>
-</ruleset>"
+    <arg name="extensions" value="php"/>
+    <arg value="p"/>
+    <arg value="s"/>
+    <arg name="parallel" value="8"/>
+    <config name="ignore_warnings_on_exit" value="1"/>
+</ruleset>
+PHPCS_EOF4
     
-    # Use mode-specific file operation
-    if perform_mode_specific_file_operation "$phpcs_content" "phpcs.xml.dist" "write"; then
+    if [ -f "phpcs.xml.dist" ]; then
         print_success "phpcs.xml.dist generado"
     else
         print_error "Error generando phpcs.xml.dist"

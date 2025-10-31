@@ -1,0 +1,16 @@
+parameters:
+  level: 5
+
+  paths:
+{{PATHS}}
+  excludePaths:
+{{EXCLUDES}}    - {{WP_CONTENT_DIR_PARENT}}/wp-admin/
+    - {{WP_CONTENT_DIR_PARENT}}/wp-includes/
+
+  ignoreErrors:
+    - '#Call to an undefined method#'
+    - '#Access to an undefined property#'
+    - '#Undefined variable#'
+
+  phpVersion: 80100
+  checkMissingTypehints: false

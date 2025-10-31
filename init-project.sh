@@ -2838,6 +2838,299 @@ generate_makefile_from_template() {
 }
 
 # ====================================================================
+# Template-based Configuration File Generation
+# ====================================================================
+
+generate_phpcs_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/phpcs.xml.dist.template"
+    local target_file="phpcs.xml.dist"
+
+    log_info "Generating phpcs.xml.dist from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Build dynamic content
+    local PREFIXES=""
+    local TEXT_DOMAINS=""
+    local FILES=""
+
+    for p in "${SELECTED_PLUGINS[@]}"; do
+        PREFIXES+="                <element value=\"$(generate_namespace "$p")\"/>\n"
+        TEXT_DOMAINS+="                <element value=\"$p\"/>\n"
+        FILES+="    <file>${WP_CONTENT_DIR}/plugins/${p}</file>\n"
+    done
+
+    for t in "${SELECTED_THEMES[@]}"; do
+        PREFIXES+="                <element value=\"$(generate_namespace "$t")\"/>\n"
+        TEXT_DOMAINS+="                <element value=\"$t\"/>\n"
+        FILES+="    <file>${WP_CONTENT_DIR}/themes/${t}</file>\n"
+    done
+
+    for m in "${SELECTED_MU_PLUGINS[@]}"; do
+        PREFIXES+="                <element value=\"$(generate_namespace "$m")\"/>\n"
+        TEXT_DOMAINS+="                <element value=\"$m\"/>\n"
+        FILES+="    <file>${WP_CONTENT_DIR}/mu-plugins/${m}</file>\n"
+    done
+
+    # Get parent directory of WP_CONTENT_DIR
+    local WP_CONTENT_DIR_PARENT="${WP_CONTENT_DIR%/*}"
+
+    # Replace variables in template
+    sed -e "s|{{PREFIXES}}|$(echo -e "$PREFIXES")|g" \
+        -e "s|{{TEXT_DOMAINS}}|$(echo -e "$TEXT_DOMAINS")|g" \
+        -e "s|{{FILES}}|$(echo -e "$FILES")|g" \
+        -e "s|{{WP_CONTENT_DIR_PARENT}}|$WP_CONTENT_DIR_PARENT|g" \
+        "$template_file" > "$target_file"
+
+    if [ -f "$target_file" ]; then
+        log_success "Generated phpcs.xml.dist from template"
+        return 0
+    else
+        log_error "Failed to generate phpcs.xml.dist"
+        return 1
+    fi
+}
+
+generate_phpstan_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/phpstan.neon.dist.template"
+    local target_file="phpstan.neon.dist"
+
+    log_info "Generating phpstan.neon.dist from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Build dynamic content
+    local PATHS=""
+    local EXCLUDES=""
+
+    for p in "${SELECTED_PLUGINS[@]}"; do
+        PATHS+="    - ${WP_CONTENT_DIR}/plugins/${p}/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/build/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/vendor/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/node_modules/\n"
+    done
+
+    for t in "${SELECTED_THEMES[@]}"; do
+        PATHS+="    - ${WP_CONTENT_DIR}/themes/${t}/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/themes/${t}/build/\n"
+        EXCLUDES+="    - ${WP_CONTENT_DIR}/themes/${t}/vendor/\n"
+    done
+
+    for m in "${SELECTED_MU_PLUGINS[@]}"; do
+        PATHS+="    - ${WP_CONTENT_DIR}/mu-plugins/${m}/\n"
+    done
+
+    # Get parent directory of WP_CONTENT_DIR
+    local WP_CONTENT_DIR_PARENT="${WP_CONTENT_DIR%/*}"
+
+    # Replace variables in template
+    sed -e "s|{{PATHS}}|$(echo -e "$PATHS")|g" \
+        -e "s|{{EXCLUDES}}|$(echo -e "$EXCLUDES")|g" \
+        -e "s|{{WP_CONTENT_DIR_PARENT}}|$WP_CONTENT_DIR_PARENT|g" \
+        "$template_file" > "$target_file"
+
+    if [ -f "$target_file" ]; then
+        log_success "Generated phpstan.neon.dist from template"
+        return 0
+    else
+        log_error "Failed to generate phpstan.neon.dist"
+        return 1
+    fi
+}
+
+generate_eslint_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/eslint.config.js.template"
+    local target_file="eslint.config.js"
+
+    log_info "Generating eslint.config.js from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Build dynamic file list
+    local ESLINT_FILES=""
+    for p in "${SELECTED_PLUGINS[@]}"; do
+        ESLINT_FILES+="      '${WP_CONTENT_DIR}/plugins/${p}/**/*.{js,jsx,ts,tsx}',\n"
+    done
+    for t in "${SELECTED_THEMES[@]}"; do
+        ESLINT_FILES+="      '${WP_CONTENT_DIR}/themes/${t}/**/*.{js,jsx,ts,tsx}',\n"
+    done
+
+    # Remove trailing comma from last line
+    ESLINT_FILES=$(echo -e "$ESLINT_FILES" | sed '$ s/,$//')
+
+    # Replace variables in template
+    sed -e "s|{{ESLINT_FILES}}|$(echo -e "$ESLINT_FILES")|g" \
+        "$template_file" > "$target_file"
+
+    if [ -f "$target_file" ]; then
+        log_success "Generated eslint.config.js from template"
+        return 0
+    else
+        log_error "Failed to generate eslint.config.js"
+        return 1
+    fi
+}
+
+generate_package_json_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/package.json.template"
+    local target_file="package.json"
+
+    log_info "Generating package.json from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Replace variables in template
+    sed -e "s/{{PROJECT_SLUG}}/$PROJECT_SLUG/g" \
+        "$template_file" > "$target_file"
+
+    if [ -f "$target_file" ]; then
+        log_success "Generated package.json from template"
+        return 0
+    else
+        log_error "Failed to generate package.json"
+        return 1
+    fi
+}
+
+generate_composer_json_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/composer.json.template"
+    local target_file="composer.json"
+
+    log_info "Generating composer.json from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Replace variables in template
+    sed -e "s/{{PROJECT_SLUG}}/$PROJECT_SLUG/g" \
+        "$template_file" > "$target_file"
+
+    if [ -f "$target_file" ]; then
+        log_success "Generated composer.json from template"
+        return 0
+    else
+        log_error "Failed to generate composer.json"
+        return 1
+    fi
+}
+
+generate_vscode_settings_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/vscode-settings.json.template"
+    local target_file=".vscode/settings.json"
+
+    log_info "Generating .vscode/settings.json from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Create .vscode directory if it doesn't exist
+    mkdir -p .vscode
+
+    # Copy template (no variable replacement needed for this file)
+    cp "$template_file" "$target_file"
+
+    if [ -f "$target_file" ]; then
+        log_success "Generated .vscode/settings.json from template"
+        return 0
+    else
+        log_error "Failed to generate .vscode/settings.json"
+        return 1
+    fi
+}
+
+generate_vscode_extensions_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/vscode-extensions.json.template"
+    local target_file=".vscode/extensions.json"
+
+    log_info "Generating .vscode/extensions.json from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Create .vscode directory if it doesn't exist
+    mkdir -p .vscode
+
+    # Copy template (no variable replacement needed for this file)
+    cp "$template_file" "$target_file"
+
+    if [ -f "$target_file" ]; then
+        log_success "Generated .vscode/extensions.json from template"
+        return 0
+    else
+        log_error "Failed to generate .vscode/extensions.json"
+        return 1
+    fi
+}
+
+generate_workspace_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/wp.code-workspace.template"
+    local workspace_file="wp.code-workspace"
+
+    log_info "Generating workspace file from template: $workspace_file"
+
+    if [ ! -f "$template_file" ]; then
+        log_warning "Template not found: $template_file, using legacy method"
+        # Fall back to legacy generation
+        generate_workspace_file
+        return $?
+    fi
+
+    # Build workspace folders list
+    local WORKSPACE_FOLDERS=""
+
+    # Add selected plugin paths
+    for plugin in "${SELECTED_PLUGINS[@]}"; do
+        if [ -d "$WP_CONTENT_DIR/plugins/$plugin" ]; then
+            WORKSPACE_FOLDERS+=",\n    {\n      \"path\": \"$WP_CONTENT_DIR/plugins/$plugin\"\n    }"
+        fi
+    done
+
+    # Add selected theme paths
+    for theme in "${SELECTED_THEMES[@]}"; do
+        if [ -d "$WP_CONTENT_DIR/themes/$theme" ]; then
+            WORKSPACE_FOLDERS+=",\n    {\n      \"path\": \"$WP_CONTENT_DIR/themes/$theme\"\n    }"
+        fi
+    done
+
+    # Add selected mu-plugin paths
+    for mu_plugin in "${SELECTED_MU_PLUGINS[@]}"; do
+        if [ -d "$WP_CONTENT_DIR/mu-plugins/$mu_plugin" ]; then
+            WORKSPACE_FOLDERS+=",\n    {\n      \"path\": \"$WP_CONTENT_DIR/mu-plugins/$mu_plugin\"\n    }"
+        fi
+    done
+
+    # Replace variables in template
+    sed -e "s|{{WORKSPACE_FOLDERS}}|$(echo -e "$WORKSPACE_FOLDERS")|g" \
+        "$template_file" > "$workspace_file"
+
+    if [ -f "$workspace_file" ]; then
+        log_success "Generated $workspace_file from template with ${#SELECTED_PLUGINS[@]} plugins, ${#SELECTED_THEMES[@]} themes, ${#SELECTED_MU_PLUGINS[@]} mu-plugins"
+        return 0
+    else
+        log_error "Failed to generate $workspace_file"
+        return 1
+    fi
+}
+
+# ====================================================================
 # JSON Merge Functions for Mode 4
 # ====================================================================
 
@@ -3854,411 +4147,51 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
     [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ] && print_success "Backup: $BACKUP_DIR"
     echo ""
 
-    # Construir prefixes y text domains
-    PREFIXES=""
-    TEXT_DOMAINS="                <element value=\"${TEXT_DOMAIN}\"/>\n"
-
-    add_component() {
-        local name="$1"
-        local prefix=$(echo "$name" | tr '-' '_')
-        local constant=$(generate_constant "$name")
-        local namespace=$(generate_namespace "$name")
-        PREFIXES+="                <element value=\"${prefix}_\"/>\n"
-        PREFIXES+="                <element value=\"${constant}_\"/>\n"
-        # Escapar correctamente para XML
-        PREFIXES+="                <element value=\"${namespace}\\\\\"/>\n"
-        TEXT_DOMAINS+="                <element value=\"${name}\"/>\n"
-    }
-
-    add_component "$PROJECT_SLUG"
-    for p in "${SELECTED_PLUGINS[@]}"; do add_component "$p"; done
-    for t in "${SELECTED_THEMES[@]}"; do add_component "$t"; done
-
-    # Construir rutas
-    FILES=""
-    for p in "${SELECTED_PLUGINS[@]}"; do FILES+="    <file>${WP_CONTENT_DIR}/plugins/${p}</file>\n"; done
-    for t in "${SELECTED_THEMES[@]}"; do FILES+="    <file>${WP_CONTENT_DIR}/themes/${t}</file>\n"; done
-    for m in "${SELECTED_MU_PLUGINS[@]}"; do FILES+="    <file>${WP_CONTENT_DIR}/mu-plugins/${m}</file>\n"; done
-
-    # phpcs.xml.dist
+    # Generate configuration files from templates
     print_info "Generando phpcs.xml.dist..."
-
-    # Create phpcs.xml.dist directly with cat heredoc
-    cat > phpcs.xml.dist << 'PHPCS_EOF'
-<?xml version="1.0"?>
-<ruleset name="WordPress Project PHP Standards">
-    <description>PHP CodeSniffer rules for WordPress project</description>
-
-    <rule ref="WordPress">
-        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
-        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
-        <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
-        <exclude name="Squiz.Commenting.FunctionComment.Missing"/>
-        <exclude name="Squiz.Commenting.FileComment.Missing"/>
-        <exclude name="Squiz.Commenting.ClassComment.Missing"/>
-        <exclude name="Squiz.Commenting.VariableComment.Missing"/>
-    </rule>
-
-    <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
-        <properties>
-            <property name="prefixes" type="array">
-PHPCS_EOF
-    echo -e "$PREFIXES" >> phpcs.xml.dist
-    cat >> phpcs.xml.dist << 'PHPCS_EOF2'
-            </property>
-        </properties>
-    </rule>
-
-    <rule ref="WordPress.WP.I18n">
-        <properties>
-            <property name="text_domain" type="array">
-PHPCS_EOF2
-    echo -e "$TEXT_DOMAINS" >> phpcs.xml.dist
-    cat >> phpcs.xml.dist << 'PHPCS_EOF3'
-            </property>
-        </properties>
-    </rule>
-
-    <!-- Files to check -->
-PHPCS_EOF3
-    echo -e "$FILES" >> phpcs.xml.dist
-    cat >> phpcs.xml.dist << PHPCS_EOF4
-    <!-- Exclude directories -->
-    <exclude-pattern>*/node_modules/*</exclude-pattern>
-    <exclude-pattern>*/build/*</exclude-pattern>
-    <exclude-pattern>*/vendor/*</exclude-pattern>
-    <exclude-pattern>*/tests/*</exclude-pattern>
-    <exclude-pattern>*.min.js</exclude-pattern>
-    <exclude-pattern>${WP_CONTENT_DIR%/*}/wp-admin/*</exclude-pattern>
-    <exclude-pattern>${WP_CONTENT_DIR%/*}/wp-includes/*</exclude-pattern>
-
-    <arg name="extensions" value="php"/>
-    <arg value="p"/>
-    <arg value="s"/>
-    <arg name="parallel" value="8"/>
-    <config name="ignore_warnings_on_exit" value="1"/>
-</ruleset>
-PHPCS_EOF4
-
-    if [ -f "phpcs.xml.dist" ]; then
+    if generate_phpcs_from_template; then
         print_success "phpcs.xml.dist generado"
     else
         print_error "Error generando phpcs.xml.dist"
     fi
 
-    # phpstan.neon.dist
     print_info "Generando phpstan.neon.dist..."
-    PATHS=""
-    EXCLUDES=""
-    for p in "${SELECTED_PLUGINS[@]}"; do
-        PATHS+="    - ${WP_CONTENT_DIR}/plugins/${p}/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/build/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/vendor/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/node_modules/\n"
-    done
-    for t in "${SELECTED_THEMES[@]}"; do
-        PATHS+="    - ${WP_CONTENT_DIR}/themes/${t}/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/themes/${t}/build/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/themes/${t}/vendor/\n"
-    done
-    for m in "${SELECTED_MU_PLUGINS[@]}"; do
-        PATHS+="    - ${WP_CONTENT_DIR}/mu-plugins/${m}/\n"
-    done
-
-    cat > phpstan.neon.dist << PHPSTAN_EOF
-parameters:
-  level: 5
-
-  paths:
-$(echo -e "$PATHS")
-  excludePaths:
-$(echo -e "$EXCLUDES")    - ${WP_CONTENT_DIR%/*}/wp-admin/
-    - ${WP_CONTENT_DIR%/*}/wp-includes/
-
-  ignoreErrors:
-    - '#Call to an undefined method#'
-    - '#Access to an undefined property#'
-    - '#Undefined variable#'
-
-  phpVersion: 80100
-  checkMissingTypehints: false
-PHPSTAN_EOF
-
-    print_success "phpstan.neon.dist generado"
-
-    # eslint.config.js
-    print_info "Generando eslint.config.js..."
-    ESLINT_FILES=""
-    for p in "${SELECTED_PLUGINS[@]}"; do
-        ESLINT_FILES+="      '${WP_CONTENT_DIR}/plugins/${p}/**/*.{js,jsx,ts,tsx}',\n"
-    done
-    for t in "${SELECTED_THEMES[@]}"; do
-        ESLINT_FILES+="      '${WP_CONTENT_DIR}/themes/${t}/**/*.{js,jsx,ts,tsx}',\n"
-    done
-
-    # Create eslint.config.js directly
-    cat > eslint.config.js << 'ESLINT_EOF'
-import js from '@eslint/js';
-import globals from 'globals';
-
-export default [
-  {
-    ignores: ['build/', 'node_modules/', 'vendor/', '**/*.min.js'],
-  },
-  {
-    ...js.configs.recommended,
-    languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: 'module',
-      globals: { ...globals.browser, ...globals.node, wp: 'readonly', jQuery: 'readonly', $: 'readonly', __: 'readonly' },
-    },
-    files: [
-ESLINT_EOF
-    if [ -n "$ESLINT_FILES" ]; then
-        echo -e "$ESLINT_FILES" | sed '$ s/,$//' >> eslint.config.js
+    if generate_phpstan_from_template; then
+        print_success "phpstan.neon.dist generado"
+    else
+        print_error "Error generando phpstan.neon.dist"
     fi
-    cat >> eslint.config.js << 'ESLINT_EOF2'
-    ],
-    rules: {
-      'array-bracket-spacing': ['error', 'always'],
-      'space-in-parens': ['error', 'always'],
-      'object-curly-spacing': ['error', 'always'],
-      'computed-property-spacing': ['error', 'always'],
-      'space-infix-ops': 'error',
-      'keyword-spacing': ['error', { before: true, after: true }],
-      'space-before-function-paren': ['error', { anonymous: 'always', named: 'never', asyncArrow: 'always' }],
-      'space-before-blocks': 'error',
-      'camelcase': ['error', { properties: 'never' }],
-      'indent': ['error', 'tab', { SwitchCase: 1 }],
-      'quotes': ['error', 'single', { avoidEscape: true }],
-      'semi': ['error', 'always'],
-      'comma-dangle': ['error', 'always-multiline'],
-      'no-trailing-spaces': 'error',
-      'eol-last': 'error',
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'prefer-const': 'error',
-      'no-var': 'error',
-    },
-  },
-];
-ESLINT_EOF2
 
-    if [ -f "eslint.config.js" ]; then
+    print_info "Generando eslint.config.js..."
+    if generate_eslint_from_template; then
         print_success "eslint.config.js generado"
     else
         print_error "Error generando eslint.config.js"
     fi
 
-    # Handle package.json
     print_info "Procesando package.json..."
-    cat > package.json << PACKAGE_EOF
-{
-  "name": "${PROJECT_SLUG}",
-  "version": "1.0.0",
-  "description": "WordPress project with coding standards",
-  "type": "module",
-  "scripts": {
-    "lint:js": "eslint '**/*.{js,jsx,ts,tsx}'",
-    "lint:js:fix": "eslint --fix '**/*.{js,jsx,ts,tsx}'",
-    "lint:php": "./vendor/bin/phpcs --standard=phpcs.xml.dist",
-    "lint:php:fix": "./vendor/bin/phpcbf --standard=phpcs.xml.dist",
-    "lint": "npm run lint:js && npm run lint:php",
-    "format": "npm run lint:js:fix && npm run lint:php:fix"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.9.0",
-    "eslint": "^9.9.0",
-    "globals": "^15.9.0"
-  },
-  "author": "",
-  "license": "MIT"
-}
-PACKAGE_EOF
-
-    if [ -f "package.json" ]; then
+    if generate_package_json_from_template; then
         print_success "package.json generado"
     else
         print_error "Error generando package.json"
     fi
 
-    # Handle composer.json
     print_info "Procesando composer.json..."
-    cat > composer.json << COMPOSER_EOF
-{
-    "name": "${PROJECT_SLUG}/wordpress",
-    "description": "WordPress project with coding standards",
-    "type": "project",
-    "require": {
-        "php": ">=8.1"
-    },
-    "require-dev": {
-        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
-        "phpcompatibility/php-compatibility": "^9.3",
-        "phpstan/phpstan": "^1.11",
-        "wp-coding-standards/wpcs": "^3.1"
-    },
-    "config": {
-        "allow-plugins": {
-            "dealerdirect/phpcodesniffer-composer-installer": true
-        }
-    },
-    "scripts": {
-        "lint": "phpcs --standard=phpcs.xml.dist",
-        "lint:fix": "phpcbf --standard=phpcs.xml.dist",
-        "analyze": "phpstan analyze"
-    }
-}
-COMPOSER_EOF
-
-    if [ -f "composer.json" ]; then
+    if generate_composer_json_from_template; then
         print_success "composer.json generado"
     else
         print_error "Error generando composer.json"
     fi
-    # Generar configuración de VSCode usando operaciones específicas por modo
+
     print_info "Procesando configuración de VSCode..."
-
-    # extensions.json content
-    extensions_content="{
-  \"recommendations\": [
-    \"bmewburn.vscode-intelephense-client\",
-    \"valeryanm.vscode-phpsab\",
-    \"dbaeumer.vscode-eslint\",
-    \"stylelint.vscode-stylelint\",
-    \"esbenp.prettier-vscode\",
-    \"editorconfig.editorconfig\",
-    \"ms-vscode.vscode-typescript-tslint-plugin\",
-    \"ms-vscode.vscode-typescript-tslint-plugin\"
-  ]
-}"
-
-    # settings.json content (VSCode supports JSONC with comments)
-    settings_content="{
-  \"editor.rulers\": [120],
-  \"editor.tabSize\": 4,
-  \"editor.insertSpaces\": false,
-  \"editor.detectIndentation\": false,
-  \"editor.formatOnSave\": true,
-  \"phpcs.enable\": true,
-  \"phpcs.standard\": \"./phpcs.xml.dist\",
-  \"phpcs.executablePath\": \"./vendor/bin/phpcs\",
-  \"phpcs.showSources\": true,
-  \"phpcs.showSniffSource\": true,
-  \"phpsab.snifferMode\": \"onType\",
-  \"phpsab.snifferShowSources\": true,
-  \"eslint.enable\": true,
-  \"eslint.validate\": [\"javascript\", \"javascriptreact\", \"typescript\", \"typescriptreact\"],
-  \"eslint.workingDirectories\": [\".\"],
-  \"stylelint.enable\": true,
-  \"stylelint.validate\": [\"css\", \"scss\", \"sass\"],
-  \"[php]\": {
-    \"editor.defaultFormatter\": \"valeryanm.vscode-phpsab\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 4,
-    \"editor.insertSpaces\": false,
-    \"editor.rulers\": [120],
-    \"editor.codeActionsOnSave\": {
-      \"source.fixAll\": \"always\"
-    }
-  },
-  \"[javascript]\": {
-    \"editor.defaultFormatter\": \"dbaeumer.vscode-eslint\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true,
-    \"editor.codeActionsOnSave\": {
-      \"source.fixAll.eslint\": \"always\"
-    }
-  },
-  \"[javascriptreact]\": {
-    \"editor.defaultFormatter\": \"dbaeumer.vscode-eslint\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true,
-    \"editor.codeActionsOnSave\": {
-      \"source.fixAll.eslint\": \"always\"
-    }
-  },
-  \"[typescript]\": {
-    \"editor.defaultFormatter\": \"dbaeumer.vscode-eslint\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true,
-    \"editor.codeActionsOnSave\": {
-      \"source.fixAll.eslint\": \"always\"
-    }
-  },
-  \"[typescriptreact]\": {
-    \"editor.defaultFormatter\": \"dbaeumer.vscode-eslint\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true,
-    \"editor.codeActionsOnSave\": {
-      \"source.fixAll.eslint\": \"always\"
-    }
-  },
-  \"[css]\": {
-    \"editor.defaultFormatter\": \"stylelint.vscode-stylelint\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true,
-    \"editor.codeActionsOnSave\": {
-      \"source.fixAll.stylelint\": \"always\"
-    }
-  },
-  \"[scss]\": {
-    \"editor.defaultFormatter\": \"stylelint.vscode-stylelint\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true,
-    \"editor.codeActionsOnSave\": {
-      \"source.fixAll.stylelint\": \"always\"
-    }
-  },
-  \"[json]\": {
-    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true
-  },
-  \"[jsonc]\": {
-    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true
-  },
-  \"[markdown]\": {
-    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true,
-    \"editor.wordWrap\": \"on\"
-  },
-  \"[yaml]\": {
-    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true
-  },
-  \"[html]\": {
-    \"editor.defaultFormatter\": \"esbenp.prettier-vscode\",
-    \"editor.formatOnSave\": true,
-    \"editor.tabSize\": 2,
-    \"editor.insertSpaces\": true
-  }
-}"
-
-    # Use mode-specific file operations for VSCode configuration
-    if perform_mode_specific_file_operation "$extensions_content" ".vscode/extensions.json" "write" && \
-       perform_mode_specific_file_operation "$settings_content" ".vscode/settings.json" "write"; then
-        print_success ".vscode/ procesado según modo $MODE"
+    if generate_vscode_extensions_from_template && generate_vscode_settings_from_template; then
+        print_success ".vscode/ procesado correctamente"
     else
         print_error "Error procesando configuración de VSCode"
     fi
 
     # Generate workspace file with selected components
-    generate_workspace_file
+    generate_workspace_from_template
 
     echo ""
     print_success "Archivos de configuración generados"

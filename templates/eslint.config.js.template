@@ -1,0 +1,40 @@
+import js from '@eslint/js';
+import globals from 'globals';
+
+export default [
+  {
+    ignores: ['build/', 'node_modules/', 'vendor/', '**/*.min.js'],
+  },
+  {
+    ...js.configs.recommended,
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: { ...globals.browser, ...globals.node, wp: 'readonly', jQuery: 'readonly', $: 'readonly', __: 'readonly' },
+    },
+    files: [
+{{ESLINT_FILES}}
+    ],
+    rules: {
+      'array-bracket-spacing': ['error', 'always'],
+      'space-in-parens': ['error', 'always'],
+      'object-curly-spacing': ['error', 'always'],
+      'computed-property-spacing': ['error', 'always'],
+      'space-infix-ops': 'error',
+      'keyword-spacing': ['error', { before: true, after: true }],
+      'space-before-function-paren': ['error', { anonymous: 'always', named: 'never', asyncArrow: 'always' }],
+      'space-before-blocks': 'error',
+      'camelcase': ['error', { properties: 'never' }],
+      'indent': ['error', 'tab', { SwitchCase: 1 }],
+      'quotes': ['error', 'single', { avoidEscape: true }],
+      'semi': ['error', 'always'],
+      'comma-dangle': ['error', 'always-multiline'],
+      'no-trailing-spaces': 'error',
+      'eol-last': 'error',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'prefer-const': 'error',
+      'no-var': 'error',
+    },
+  },
+];

@@ -3,6 +3,22 @@ auth.json
 vendor/*
 node_modules/*
 
+# Generated configuration files (should only exist in target projects, not here)
+phpcs.xml.dist
+phpstan.neon.dist
+eslint.config.js
+package.json
+composer.json
+composer.lock
+wp.code-workspace
+Makefile
+bitbucket-pipelines.yml
+commitlint.config.cjs
+lighthouserc.js
+.editorconfig
+.prettierrc.json
+.stylelintrc.json
+
 # Test reports and outputs (generated files)
 test-reports/
 observability-output/

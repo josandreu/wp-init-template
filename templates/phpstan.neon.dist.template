@@ -4,7 +4,8 @@ parameters:
   paths:
 {{PATHS}}
   excludePaths:
-{{EXCLUDES}}    - {{WP_CONTENT_DIR_PARENT}}/wp-admin/
+{{EXCLUDES}}
+	- {{WP_CONTENT_DIR_PARENT}}/wp-admin/
     - {{WP_CONTENT_DIR_PARENT}}/wp-includes/
 
   ignoreErrors:

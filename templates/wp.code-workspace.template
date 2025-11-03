@@ -6,56 +6,60 @@
 {{WORKSPACE_FOLDERS}}
   ],
   "settings": {
-    "editor.rulers": [120],
     "editor.formatOnSave": true,
-    "phpsab.snifferMode": "onType",
-    "phpsab.snifferShowSources": true,
-    "eslint.enable": true,
-    "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
-    "stylelint.enable": true,
-    "stylelint.validate": ["css", "scss", "sass"],
+	"editor.rulers": [120],
+	"editor.detectIndentation": false,
+	"files.insertFinalNewline": true,
+	"files.trimTrailingWhitespace": true,
+	"css.validate": false,
+	"scss.validate": false,
+	"less.validate": false,
+	"eslint.enable": true,
+	"eslint.experimental.useFlatConfig": true,
+	"eslint.workingDirectories": ["."],
+	"eslint.validate": [
+		"javascript",
+		"javascriptreact",
+		"typescript",
+		"typescriptreact"
+	],
+	"stylelint.enable": true,
+	"stylelint.validate": [
+		"css",
+		"scss",
+		"sass"
+	],
+	"phpsab.executablePathCS": "./vendor/bin/phpcs",
+	"phpsab.executablePathCBF": "./vendor/bin/phpcbf",
+	"phpsab.standard": "./phpcs.xml.dist",
+	"phpsab.snifferMode": "onSave",
+	"phpsab.fixerEnable": true,
+	"phpsab.fixerOnSave": true,
     "[php]": {
-      "editor.formatOnSave": true,
-      "editor.defaultFormatter": "valeryanm.vscode-phpsab",
-      "editor.codeActionsOnSave": {
-        "source.fixAll": "always"
-      }
-    },
-    "[javascript]": {
-      "editor.formatOnSave": true,
-      "editor.defaultFormatter": "dbaeumer.vscode-eslint",
-      "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": "always"
-      }
-    },
-    "[javascriptreact]": {
-      "editor.formatOnSave": true,
-      "editor.defaultFormatter": "dbaeumer.vscode-eslint",
-      "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": "always"
-      }
-    },
-    "[css]": {
-      "editor.formatOnSave": true,
-      "editor.defaultFormatter": "stylelint.vscode-stylelint",
-      "editor.codeActionsOnSave": {
-        "source.fixAll.stylelint": "always"
-      }
-    },
-    "[scss]": {
-      "editor.formatOnSave": true,
-      "editor.defaultFormatter": "stylelint.vscode-stylelint",
-      "editor.codeActionsOnSave": {
-        "source.fixAll.stylelint": "always"
-      }
-    },
-    "[json]": {
-      "editor.formatOnSave": true,
-      "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[markdown]": {
-      "editor.formatOnSave": true,
-      "editor.defaultFormatter": "esbenp.prettier-vscode"
-    }
+		"editor.defaultFormatter": "valeryanm.vscode-phpsab",
+		"editor.tabSize": 4,
+		"editor.insertSpaces": false
+	},
+	"[javascript][javascriptreact][typescript][typescriptreact]": {
+		"editor.defaultFormatter": "dbaeumer.vscode-eslint",
+		"editor.tabSize": 4,
+		"editor.insertSpaces": false,
+		"editor.codeActionsOnSave": {
+			"source.fixAll.eslint": "always"
+		}
+	},
+	"[css][scss][sass]": {
+		"editor.defaultFormatter": "stylelint.vscode-stylelint",
+		"editor.tabSize": 4,
+		"editor.insertSpaces": false,
+		"editor.codeActionsOnSave": {
+			"source.fixAll.stylelint": "always"
+		}
+	},
+	"[json][jsonc][yaml][markdown][html]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode",
+		"editor.tabSize": 2,
+		"editor.insertSpaces": true
+	}
   }
 }

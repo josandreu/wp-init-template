@@ -2858,34 +2858,52 @@ generate_phpcs_from_template() {
     local FILES=""
 
     for p in "${SELECTED_PLUGINS[@]}"; do
-        PREFIXES+="                <element value=\"$(generate_namespace "$p")\"/>\n"
-        TEXT_DOMAINS+="                <element value=\"$p\"/>\n"
-        FILES+="    <file>${WP_CONTENT_DIR}/plugins/${p}</file>\n"
+        PREFIXES="${PREFIXES}                <element value=\"$(generate_namespace "$p")\"/>\n"
+        TEXT_DOMAINS="${TEXT_DOMAINS}                <element value=\"$p\"/>\n"
+        FILES="${FILES}    <file>${WP_CONTENT_DIR}/plugins/${p}</file>\n"
     done
 
     for t in "${SELECTED_THEMES[@]}"; do
-        PREFIXES+="                <element value=\"$(generate_namespace "$t")\"/>\n"
-        TEXT_DOMAINS+="                <element value=\"$t\"/>\n"
-        FILES+="    <file>${WP_CONTENT_DIR}/themes/${t}</file>\n"
+        PREFIXES="${PREFIXES}                <element value=\"$(generate_namespace "$t")\"/>\n"
+        TEXT_DOMAINS="${TEXT_DOMAINS}                <element value=\"$t\"/>\n"
+        FILES="${FILES}    <file>${WP_CONTENT_DIR}/themes/${t}</file>\n"
     done
 
     for m in "${SELECTED_MU_PLUGINS[@]}"; do
-        PREFIXES+="                <element value=\"$(generate_namespace "$m")\"/>\n"
-        TEXT_DOMAINS+="                <element value=\"$m\"/>\n"
-        FILES+="    <file>${WP_CONTENT_DIR}/mu-plugins/${m}</file>\n"
+        PREFIXES="${PREFIXES}                <element value=\"$(generate_namespace "$m")\"/>\n"
+        TEXT_DOMAINS="${TEXT_DOMAINS}                <element value=\"$m\"/>\n"
+        FILES="${FILES}    <file>${WP_CONTENT_DIR}/mu-plugins/${m}</file>\n"
     done
 
     # Get parent directory of WP_CONTENT_DIR
     local WP_CONTENT_DIR_PARENT="${WP_CONTENT_DIR%/*}"
 
-    # Replace variables in template
-    sed -e "s|{{PREFIXES}}|$(echo -e "$PREFIXES")|g" \
-        -e "s|{{TEXT_DOMAINS}}|$(echo -e "$TEXT_DOMAINS")|g" \
-        -e "s|{{FILES}}|$(echo -e "$FILES")|g" \
-        -e "s|{{WP_CONTENT_DIR_PARENT}}|$WP_CONTENT_DIR_PARENT|g" \
-        "$template_file" > "$target_file"
+    # Create temporary files for multiline content
+    local temp_prefixes=$(mktemp)
+    local temp_domains=$(mktemp)
+    local temp_files=$(mktemp)
+    
+    echo -e "$PREFIXES" > "$temp_prefixes"
+    echo -e "$TEXT_DOMAINS" > "$temp_domains"
+    echo -e "$FILES" > "$temp_files"
 
-    if [ -f "$target_file" ]; then
+    # Replace variables in template using perl for multiline support
+    perl -pe "
+        BEGIN { 
+            open(P, '<', '$temp_prefixes'); \$prefixes = do { local \$/; <P> }; close(P);
+            open(D, '<', '$temp_domains'); \$domains = do { local \$/; <D> }; close(D);
+            open(F, '<', '$temp_files'); \$files = do { local \$/; <F> }; close(F);
+        }
+        s/\\{\\{PREFIXES\\}\\}/\$prefixes/g;
+        s/\\{\\{TEXT_DOMAINS\\}\\}/\$domains/g;
+        s/\\{\\{FILES\\}\\}/\$files/g;
+        s/\\{\\{WP_CONTENT_DIR_PARENT\\}\\}/$WP_CONTENT_DIR_PARENT/g;
+    " "$template_file" > "$target_file"
+    
+    # Clean up temp files
+    rm -f "$temp_prefixes" "$temp_domains" "$temp_files"
+
+    if [ -f "$target_file" ] && [ -s "$target_file" ]; then
         log_success "Generated phpcs.xml.dist from template"
         return 0
     else
@@ -2910,32 +2928,47 @@ generate_phpstan_from_template() {
     local EXCLUDES=""
 
     for p in "${SELECTED_PLUGINS[@]}"; do
-        PATHS+="    - ${WP_CONTENT_DIR}/plugins/${p}/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/build/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/vendor/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/plugins/${p}/node_modules/\n"
+        PATHS="${PATHS}    - ${WP_CONTENT_DIR}/plugins/${p}/\n"
+        EXCLUDES="${EXCLUDES}    - ${WP_CONTENT_DIR}/plugins/${p}/build/\n"
+        EXCLUDES="${EXCLUDES}    - ${WP_CONTENT_DIR}/plugins/${p}/vendor/\n"
+        EXCLUDES="${EXCLUDES}    - ${WP_CONTENT_DIR}/plugins/${p}/node_modules/\n"
     done
 
     for t in "${SELECTED_THEMES[@]}"; do
-        PATHS+="    - ${WP_CONTENT_DIR}/themes/${t}/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/themes/${t}/build/\n"
-        EXCLUDES+="    - ${WP_CONTENT_DIR}/themes/${t}/vendor/\n"
+        PATHS="${PATHS}    - ${WP_CONTENT_DIR}/themes/${t}/\n"
+        EXCLUDES="${EXCLUDES}    - ${WP_CONTENT_DIR}/themes/${t}/build/\n"
+        EXCLUDES="${EXCLUDES}    - ${WP_CONTENT_DIR}/themes/${t}/vendor/\n"
     done
 
     for m in "${SELECTED_MU_PLUGINS[@]}"; do
-        PATHS+="    - ${WP_CONTENT_DIR}/mu-plugins/${m}/\n"
+        PATHS="${PATHS}    - ${WP_CONTENT_DIR}/mu-plugins/${m}/\n"
     done
 
     # Get parent directory of WP_CONTENT_DIR
     local WP_CONTENT_DIR_PARENT="${WP_CONTENT_DIR%/*}"
 
-    # Replace variables in template
-    sed -e "s|{{PATHS}}|$(echo -e "$PATHS")|g" \
-        -e "s|{{EXCLUDES}}|$(echo -e "$EXCLUDES")|g" \
-        -e "s|{{WP_CONTENT_DIR_PARENT}}|$WP_CONTENT_DIR_PARENT|g" \
-        "$template_file" > "$target_file"
+    # Create temporary files for multiline content
+    local temp_paths=$(mktemp)
+    local temp_excludes=$(mktemp)
+    
+    echo -e "$PATHS" > "$temp_paths"
+    echo -e "$EXCLUDES" > "$temp_excludes"
 
-    if [ -f "$target_file" ]; then
+    # Replace variables in template using perl for multiline support
+    perl -pe "
+        BEGIN { 
+            open(P, '<', '$temp_paths'); \$paths = do { local \$/; <P> }; close(P);
+            open(E, '<', '$temp_excludes'); \$excludes = do { local \$/; <E> }; close(E);
+        }
+        s/\\{\\{PATHS\\}\\}/\$paths/g;
+        s/\\{\\{EXCLUDES\\}\\}/\$excludes/g;
+        s/\\{\\{WP_CONTENT_DIR_PARENT\\}\\}/$WP_CONTENT_DIR_PARENT/g;
+    " "$template_file" > "$target_file"
+    
+    # Clean up temp files
+    rm -f "$temp_paths" "$temp_excludes"
+
+    if [ -f "$target_file" ] && [ -s "$target_file" ]; then
         log_success "Generated phpstan.neon.dist from template"
         return 0
     else
@@ -2958,20 +2991,31 @@ generate_eslint_from_template() {
     # Build dynamic file list
     local ESLINT_FILES=""
     for p in "${SELECTED_PLUGINS[@]}"; do
-        ESLINT_FILES+="      '${WP_CONTENT_DIR}/plugins/${p}/**/*.{js,jsx,ts,tsx}',\n"
+        ESLINT_FILES="${ESLINT_FILES}      '${WP_CONTENT_DIR}/plugins/${p}/**/*.{js,jsx,ts,tsx}',\n"
     done
     for t in "${SELECTED_THEMES[@]}"; do
-        ESLINT_FILES+="      '${WP_CONTENT_DIR}/themes/${t}/**/*.{js,jsx,ts,tsx}',\n"
+        ESLINT_FILES="${ESLINT_FILES}      '${WP_CONTENT_DIR}/themes/${t}/**/*.{js,jsx,ts,tsx}',\n"
     done
 
     # Remove trailing comma from last line
     ESLINT_FILES=$(echo -e "$ESLINT_FILES" | sed '$ s/,$//')
 
-    # Replace variables in template
-    sed -e "s|{{ESLINT_FILES}}|$(echo -e "$ESLINT_FILES")|g" \
-        "$template_file" > "$target_file"
+    # Create temporary file for multiline content
+    local temp_files=$(mktemp)
+    echo "$ESLINT_FILES" > "$temp_files"
 
-    if [ -f "$target_file" ]; then
+    # Replace variables in template using perl for multiline support
+    perl -pe "
+        BEGIN { 
+            open(F, '<', '$temp_files'); \$files = do { local \$/; <F> }; close(F);
+        }
+        s/\\{\\{ESLINT_FILES\\}\\}/\$files/g;
+    " "$template_file" > "$target_file"
+    
+    # Clean up temp file
+    rm -f "$temp_files"
+
+    if [ -f "$target_file" ] && [ -s "$target_file" ]; then
         log_success "Generated eslint.config.js from template"
         return 0
     else
@@ -3099,33 +3143,113 @@ generate_workspace_from_template() {
     # Add selected plugin paths
     for plugin in "${SELECTED_PLUGINS[@]}"; do
         if [ -d "$WP_CONTENT_DIR/plugins/$plugin" ]; then
-            WORKSPACE_FOLDERS+=",\n    {\n      \"path\": \"$WP_CONTENT_DIR/plugins/$plugin\"\n    }"
+            WORKSPACE_FOLDERS="${WORKSPACE_FOLDERS},\n    {\n      \"path\": \"$WP_CONTENT_DIR/plugins/$plugin\"\n    }"
         fi
     done
 
     # Add selected theme paths
     for theme in "${SELECTED_THEMES[@]}"; do
         if [ -d "$WP_CONTENT_DIR/themes/$theme" ]; then
-            WORKSPACE_FOLDERS+=",\n    {\n      \"path\": \"$WP_CONTENT_DIR/themes/$theme\"\n    }"
+            WORKSPACE_FOLDERS="${WORKSPACE_FOLDERS},\n    {\n      \"path\": \"$WP_CONTENT_DIR/themes/$theme\"\n    }"
         fi
     done
 
     # Add selected mu-plugin paths
     for mu_plugin in "${SELECTED_MU_PLUGINS[@]}"; do
         if [ -d "$WP_CONTENT_DIR/mu-plugins/$mu_plugin" ]; then
-            WORKSPACE_FOLDERS+=",\n    {\n      \"path\": \"$WP_CONTENT_DIR/mu-plugins/$mu_plugin\"\n    }"
+            WORKSPACE_FOLDERS="${WORKSPACE_FOLDERS},\n    {\n      \"path\": \"$WP_CONTENT_DIR/mu-plugins/$mu_plugin\"\n    }"
         fi
     done
 
-    # Replace variables in template
-    sed -e "s|{{WORKSPACE_FOLDERS}}|$(echo -e "$WORKSPACE_FOLDERS")|g" \
-        "$template_file" > "$workspace_file"
+    # Create temporary file for multiline content
+    local temp_folders=$(mktemp)
+    echo -e "$WORKSPACE_FOLDERS" > "$temp_folders"
 
-    if [ -f "$workspace_file" ]; then
+    # Replace variables in template using perl for multiline support
+    perl -pe "
+        BEGIN { 
+            open(F, '<', '$temp_folders'); \$folders = do { local \$/; <F> }; close(F);
+        }
+        s/\\{\\{WORKSPACE_FOLDERS\\}\\}/\$folders/g;
+    " "$template_file" > "$workspace_file"
+    
+    # Clean up temp file
+    rm -f "$temp_folders"
+
+    if [ -f "$workspace_file" ] && [ -s "$workspace_file" ]; then
         log_success "Generated $workspace_file from template with ${#SELECTED_PLUGINS[@]} plugins, ${#SELECTED_THEMES[@]} themes, ${#SELECTED_MU_PLUGINS[@]} mu-plugins"
         return 0
     else
         log_error "Failed to generate $workspace_file"
+        return 1
+    fi
+}
+
+generate_editorconfig_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/.editorconfig.template"
+    local target_file=".editorconfig"
+
+    log_info "Generating .editorconfig from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Copy template (no variable replacement needed for this file)
+    cp "$template_file" "$target_file"
+
+    if [ -f "$target_file" ] && [ -s "$target_file" ]; then
+        log_success "Generated .editorconfig from template"
+        return 0
+    else
+        log_error "Failed to generate .editorconfig"
+        return 1
+    fi
+}
+
+generate_prettierrc_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/.prettierrc.json.template"
+    local target_file=".prettierrc.json"
+
+    log_info "Generating .prettierrc.json from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Copy template (no variable replacement needed for this file)
+    cp "$template_file" "$target_file"
+
+    if [ -f "$target_file" ] && [ -s "$target_file" ]; then
+        log_success "Generated .prettierrc.json from template"
+        return 0
+    else
+        log_error "Failed to generate .prettierrc.json"
+        return 1
+    fi
+}
+
+generate_stylelintrc_from_template() {
+    local template_file="$INIT_SCRIPT_DIR/templates/.stylelintrc.json.template"
+    local target_file=".stylelintrc.json"
+
+    log_info "Generating .stylelintrc.json from template"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    # Copy template (no variable replacement needed for this file)
+    cp "$template_file" "$target_file"
+
+    if [ -f "$target_file" ] && [ -s "$target_file" ]; then
+        log_success "Generated .stylelintrc.json from template"
+        return 0
+    else
+        log_error "Failed to generate .stylelintrc.json"
         return 1
     fi
 }
@@ -3569,14 +3693,14 @@ generate_project_files() {
     local template_files=()
 
     # Always try to process .gitignore.template (required) - use INIT_SCRIPT_DIR to find template
-    template_files+=("$INIT_SCRIPT_DIR/.gitignore.template:.gitignore")
+    template_files+=("$INIT_SCRIPT_DIR/templates/.gitignore.template:.gitignore")
 
     # Add optional templates only if they exist - use INIT_SCRIPT_DIR to find templates
     [ -f "$INIT_SCRIPT_DIR/.editorconfig" ] && template_files+=("$INIT_SCRIPT_DIR/.editorconfig:.editorconfig")
-    [ -f "$INIT_SCRIPT_DIR/bitbucket-pipelines.yml.template" ] && template_files+=("$INIT_SCRIPT_DIR/bitbucket-pipelines.yml.template:bitbucket-pipelines.yml")
-    [ -f "$INIT_SCRIPT_DIR/commitlint.config.cjs.template" ] && template_files+=("$INIT_SCRIPT_DIR/commitlint.config.cjs.template:commitlint.config.cjs")
-    [ -f "$INIT_SCRIPT_DIR/lighthouserc.js.template" ] && template_files+=("$INIT_SCRIPT_DIR/lighthouserc.js.template:lighthouserc.js")
-    [ -f "$INIT_SCRIPT_DIR/Makefile.template" ] && template_files+=("$INIT_SCRIPT_DIR/Makefile.template:Makefile")
+    [ -f "$INIT_SCRIPT_DIR/templates/bitbucket-pipelines.yml.template" ] && template_files+=("$INIT_SCRIPT_DIR/templates/bitbucket-pipelines.yml.template:bitbucket-pipelines.yml")
+    [ -f "$INIT_SCRIPT_DIR/templates/commitlint.config.cjs.template" ] && template_files+=("$INIT_SCRIPT_DIR/templates/commitlint.config.cjs.template:commitlint.config.cjs")
+    [ -f "$INIT_SCRIPT_DIR/templates/lighthouserc.js.template" ] && template_files+=("$INIT_SCRIPT_DIR/templates/lighthouserc.js.template:lighthouserc.js")
+    [ -f "$INIT_SCRIPT_DIR/templates/Makefile.template" ] && template_files+=("$INIT_SCRIPT_DIR/templates/Makefile.template:Makefile")
     [ -f "$INIT_SCRIPT_DIR/verify-template.sh" ] && template_files+=("$INIT_SCRIPT_DIR/verify-template.sh:verify-project.sh")
 
     print_info "Generating project files from templates..."
@@ -4192,6 +4316,27 @@ if [ "$CONFIGURE_PROJECT" = true ]; then
 
     # Generate workspace file with selected components
     generate_workspace_from_template
+
+    # Generate editor configuration files
+    print_info "Generando archivos de configuración del editor..."
+    
+    if generate_editorconfig_from_template; then
+        print_success ".editorconfig generado"
+    else
+        print_error "Error generando .editorconfig"
+    fi
+
+    if generate_prettierrc_from_template; then
+        print_success ".prettierrc.json generado"
+    else
+        print_error "Error generando .prettierrc.json"
+    fi
+
+    if generate_stylelintrc_from_template; then
+        print_success ".stylelintrc.json generado"
+    else
+        print_error "Error generando .stylelintrc.json"
+    fi
 
     echo ""
     print_success "Archivos de configuración generados"

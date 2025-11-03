@@ -11,12 +11,17 @@ end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 indent_style = tab
+
+# PHP, JavaScript, CSS: tabs (4)
+[*.{php,js,jsx,ts,tsx,css,scss,sass,less}]
+indent_style = tab
 indent_size = 4
 
-[{.jshintrc,*.js,*.json,*.yml}]
+# JSON, YAML, Markdown: espacios (2)
+[*.{jshintrc,json,yml,yaml,md}]
+indent_style = space
+indent_size = 2
+
+# Makefiles: tabs obligatorios
+[Makefile]
 indent_style = tab
-indent_size = 1
-
-[*.md]
-trim_trailing_whitespace = false
-

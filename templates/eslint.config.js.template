@@ -1,40 +1,140 @@
 import js from '@eslint/js';
+import wordpressPlugin from '@wordpress/eslint-plugin';
+import pluginReact from 'eslint-plugin-react';
 import globals from 'globals';
 
 export default [
-  {
-    ignores: ['build/', 'node_modules/', 'vendor/', '**/*.min.js'],
-  },
-  {
-    ...js.configs.recommended,
-    languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: 'module',
-      globals: { ...globals.browser, ...globals.node, wp: 'readonly', jQuery: 'readonly', $: 'readonly', __: 'readonly' },
-    },
-    files: [
+	{
+		ignores: [
+			'build/',
+			'node_modules/',
+			'vendor/',
+			'**/*.min.js',
+			'**/dist/',
+		],
+	},
+	{
+		files: [
 {{ESLINT_FILES}}
-    ],
-    rules: {
-      'array-bracket-spacing': ['error', 'always'],
-      'space-in-parens': ['error', 'always'],
-      'object-curly-spacing': ['error', 'always'],
-      'computed-property-spacing': ['error', 'always'],
-      'space-infix-ops': 'error',
-      'keyword-spacing': ['error', { before: true, after: true }],
-      'space-before-function-paren': ['error', { anonymous: 'always', named: 'never', asyncArrow: 'always' }],
-      'space-before-blocks': 'error',
-      'camelcase': ['error', { properties: 'never' }],
-      'indent': ['error', 'tab', { SwitchCase: 1 }],
-      'quotes': ['error', 'single', { avoidEscape: true }],
-      'semi': ['error', 'always'],
-      'comma-dangle': ['error', 'always-multiline'],
-      'no-trailing-spaces': 'error',
-      'eol-last': 'error',
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'prefer-const': 'error',
-      'no-var': 'error',
-    },
-  },
+		],
+		languageOptions: {
+			ecmaVersion: 2022,
+			sourceType: 'module',
+			parserOptions: {
+				ecmaFeatures: {
+					jsx: true,
+				},
+			},
+			globals: {
+				...globals.browser,
+				...globals.node,
+				// Globales de WordPress
+				wp: 'readonly',
+				jQuery: 'readonly',
+				$: 'readonly',
+				// Funciones de traducción
+				__: 'readonly',
+				_x: 'readonly',
+				_n: 'readonly',
+				_nx: 'readonly',
+				// Otras funciones comunes de WordPress
+				_e: 'readonly',
+				esc_html__: 'readonly',
+				esc_attr__: 'readonly',
+			},
+		},
+		plugins: {
+			'@wordpress': wordpressPlugin,
+			'react': pluginReact,
+		},
+		rules: {
+			...js.configs.recommended.rules,
+
+			...wordpressPlugin.configs.recommended.rules,
+
+			'prettier/prettier': 'off',
+
+			'array-bracket-spacing': ['error', 'always'],
+			'space-in-parens': ['error', 'always'],
+			'object-curly-spacing': ['error', 'always'],
+			'computed-property-spacing': ['error', 'always'],
+			'space-infix-ops': 'error',
+			'keyword-spacing': ['error', { before: true, after: true }],
+			'space-before-function-paren': ['error', {
+				anonymous: 'never',
+				named: 'never',
+				asyncArrow: 'always',
+			}],
+			'space-before-blocks': 'error',
+			'brace-style': ['error', '1tbs'],
+
+			'camelcase': ['error', { 
+				properties: 'never',
+				ignoreDestructuring: true,
+			}],
+
+			'indent': ['error', 'tab', {
+				SwitchCase: 1,
+				VariableDeclarator: 1,
+				outerIIFEBody: 1,
+				MemberExpression: 1,
+				FunctionDeclaration: {
+					parameters: 1,
+					body: 1,
+				},
+				FunctionExpression: {
+					parameters: 1,
+					body: 1,
+				},
+				CallExpression: {
+					arguments: 1,
+				},
+				ArrayExpression: 1,
+				ObjectExpression: 1,
+				ImportDeclaration: 1,
+				flatTernaryExpressions: false,
+				ignoredNodes: ['JSXElement', 'JSXElement > *', 'JSXAttribute', 'JSXIdentifier', 'JSXNamespacedName', 'JSXMemberExpression', 'JSXSpreadAttribute', 'JSXExpressionContainer', 'JSXOpeningElement', 'JSXClosingElement', 'JSXText', 'JSXEmptyExpression', 'JSXSpreadChild'],
+				ignoreComments: false,
+			}],
+
+			'quotes': ['error', 'single', { 
+				avoidEscape: true, 
+				allowTemplateLiterals: true,
+			}],
+			'semi': ['error', 'always'],
+			'comma-dangle': ['error', 'always-multiline'],
+			'comma-spacing': ['error', { before: false, after: true }],
+
+			'no-trailing-spaces': 'error',
+			'eol-last': ['error', 'always'],
+			'no-multiple-empty-lines': ['error', { max: 1 }],
+
+			'no-console': ['warn', { allow: ['warn', 'error'] }],
+			'no-unused-vars': ['error', { 
+				argsIgnorePattern: '^_',
+				varsIgnorePattern: '^_',
+			}],
+			'prefer-const': 'error',
+			'no-var': 'error',
+			'dot-notation': 'error',
+			'no-else-return': ['error', { allowElseIf: false }],
+
+			'jsdoc/require-jsdoc': 'off',
+			'jsdoc/require-param': 'off',
+			'jsdoc/require-returns': 'off',
+
+			'react/jsx-uses-react': 'off', // No necesario en React 17+
+			'react/react-in-jsx-scope': 'off', // No necesario en React 17+
+			'react/jsx-curly-spacing': ['error', { when: 'always', children: true }],
+			'react/jsx-equals-spacing': ['error', 'never'],
+			'react/jsx-indent': ['error', 'tab'],
+			'react/jsx-indent-props': ['error', 'tab'],
+			'react/jsx-tag-spacing': ['error', {
+				closingSlash: 'never',
+				beforeSelfClosing: 'always',
+				afterOpening: 'never',
+				beforeClosing: 'never',
+			}],
+		},
+	},
 ];

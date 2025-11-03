@@ -104,6 +104,101 @@
 
 ---
 
+## 🎨 Sistema de Templates Externas
+
+<div align="center">
+
+### ✨ **Personalización Sin Límites**
+
+*Modifica fácilmente la configuración de tu proyecto sin tocar el código del script*
+
+</div>
+
+Todos los archivos de configuración se generan desde **templates editables** ubicadas en el directorio `templates/`. Esto te permite:
+
+<table>
+<tr>
+<td width="33%">
+
+### 📝 **Fácil Edición**
+
+- Modifica templates sin tocar el script
+- Cambios visibles inmediatamente
+- Sintaxis clara y documentada
+
+</td>
+<td width="33%">
+
+### 🔄 **Versionado**
+
+- Templates en Git
+- Historial de cambios
+- Fácil rollback
+
+</td>
+<td width="33%">
+
+### 🎯 **Consistencia**
+
+- Misma configuración base
+- Fácil propagación de mejoras
+- Estándares unificados
+
+</td>
+</tr>
+</table>
+
+#### 📁 Templates Disponibles
+
+```
+templates/
+├── 🔍 Linting y Análisis
+│   ├── phpcs.xml.dist.template
+│   ├── phpstan.neon.dist.template
+│   ├── eslint.config.js.template
+│   └── .stylelintrc.json.template
+│
+├── 📦 Gestión de Dependencias
+│   ├── package.json.template
+│   └── composer.json.template
+│
+├── ⚙️ Configuración del Editor
+│   ├── .editorconfig.template
+│   └── .prettierrc.json.template
+│
+├── 💻 VSCode
+│   ├── vscode-settings.json.template
+│   ├── vscode-extensions.json.template
+│   └── wp.code-workspace.template
+│
+└── 🛠️ Otros
+    ├── .gitignore.template
+    ├── Makefile.template
+    ├── bitbucket-pipelines.yml.template
+    ├── commitlint.config.cjs.template
+    └── lighthouserc.js.template
+```
+
+#### 🚀 Uso Rápido
+
+```bash
+# 1. Edita la template que necesites
+vim templates/phpcs.xml.dist.template
+
+# 2. Ejecuta el script normalmente
+./init-project.sh /path/to/wordpress 1
+
+# 3. Los cambios se aplican automáticamente ✨
+```
+
+#### 📚 Documentación Completa
+
+- **[templates/README.md](templates/README.md)** - Guía completa de uso de templates
+- **[CHANGELOG_TEMPLATES.md](CHANGELOG_TEMPLATES.md)** - Detalles técnicos de implementación
+- **[IMPLEMENTACION_TEMPLATES.md](IMPLEMENTACION_TEMPLATES.md)** - Guía de implementación
+
+---
+
 ## 🚀 Inicio Rápido
 
 <div align="center">

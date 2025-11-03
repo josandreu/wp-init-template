@@ -9,17 +9,31 @@ Este directorio contiene las plantillas (templates) que utiliza el script `init-
 - **`phpcs.xml.dist.template`** - Configuración de PHP CodeSniffer
 - **`phpstan.neon.dist.template`** - Configuración de PHPStan
 - **`eslint.config.js.template`** - Configuración de ESLint
+- **`.stylelintrc.json.template`** - Configuración de Stylelint para CSS/SCSS
 
 ### Gestión de Dependencias
 
 - **`package.json.template`** - Dependencias y scripts de Node.js/npm
 - **`composer.json.template`** - Dependencias y scripts de PHP/Composer
 
+### Configuración del Editor
+
+- **`.editorconfig.template`** - Configuración de EditorConfig (indentación, charset, etc.)
+- **`.prettierrc.json.template`** - Configuración de Prettier para formateo de código
+
 ### Configuración de VSCode
 
 - **`vscode-settings.json.template`** - Configuración del editor VSCode
 - **`vscode-extensions.json.template`** - Extensiones recomendadas para VSCode
 - **`wp.code-workspace.template`** - Workspace multi-carpeta de VSCode
+
+### Otros Templates
+
+- **`.gitignore.template`** - Archivos a ignorar en Git
+- **`Makefile.template`** - Comandos make para el proyecto
+- **`bitbucket-pipelines.yml.template`** - Configuración de CI/CD para Bitbucket
+- **`commitlint.config.cjs.template`** - Configuración de Commitlint
+- **`lighthouserc.js.template`** - Configuración de Lighthouse CI
 
 ## 🔧 Variables de Reemplazo
 

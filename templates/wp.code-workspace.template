@@ -15,7 +15,7 @@
 	"scss.validate": false,
 	"less.validate": false,
 	"eslint.enable": true,
-	"eslint.experimental.useFlatConfig": true,
+	"eslint.useFlatConfig": true,
 	"eslint.workingDirectories": ["."],
 	"eslint.validate": [
 		"javascript",

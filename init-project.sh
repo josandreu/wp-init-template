@@ -3646,7 +3646,8 @@ generate_adapted_file() {
 
     # Adapt file content based on project configuration
     local success=true
-    case "$source" in
+    local basename_source=$(basename "$source")
+    case "$basename_source" in
         ".gitignore.template")
             if ! generate_gitignore_from_template "$source" "$target"; then
                 success=false

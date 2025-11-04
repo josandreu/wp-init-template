@@ -515,8 +515,8 @@ validate_configure_context() {
     done
     
     # Template validations - use INIT_SCRIPT_DIR to find templates relative to init-project.sh location
-    local required_templates=("$INIT_SCRIPT_DIR/.gitignore.template")
-    local optional_templates=("$INIT_SCRIPT_DIR/bitbucket-pipelines.yml.template" "$INIT_SCRIPT_DIR/commitlint.config.cjs.template" "$INIT_SCRIPT_DIR/lighthouserc.js.template" "$INIT_SCRIPT_DIR/Makefile.template")
+    local required_templates=("$INIT_SCRIPT_DIR/templates/.gitignore.template")
+    local optional_templates=("$INIT_SCRIPT_DIR/templates/bitbucket-pipelines.yml.template" "$INIT_SCRIPT_DIR/templates/commitlint.config.cjs.template" "$INIT_SCRIPT_DIR/templates/lighthouserc.js.template" "$INIT_SCRIPT_DIR/templates/Makefile.template")
     
     validate_template_files "$CONTEXT_CONFIGURE" "${required_templates[@]}"
     validate_optional_template_files "$CONTEXT_CONFIGURE" "${optional_templates[@]}"
@@ -690,11 +690,11 @@ validate_template_context() {
     
     # All template files validation - use INIT_SCRIPT_DIR to find templates relative to init-project.sh location
     local all_templates=(
-        "$INIT_SCRIPT_DIR/.gitignore.template"
-        "$INIT_SCRIPT_DIR/bitbucket-pipelines.yml.template"
-        "$INIT_SCRIPT_DIR/commitlint.config.cjs.template"
-        "$INIT_SCRIPT_DIR/lighthouserc.js.template"
-        "$INIT_SCRIPT_DIR/Makefile.template"
+        "$INIT_SCRIPT_DIR/templates/.gitignore.template"
+        "$INIT_SCRIPT_DIR/templates/bitbucket-pipelines.yml.template"
+        "$INIT_SCRIPT_DIR/templates/commitlint.config.cjs.template"
+        "$INIT_SCRIPT_DIR/templates/lighthouserc.js.template"
+        "$INIT_SCRIPT_DIR/templates/Makefile.template"
     )
     
     validate_template_files "$CONTEXT_TEMPLATE" "${all_templates[@]}"
